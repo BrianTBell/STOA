@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import tempfile
@@ -22,6 +23,8 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
+
+from backend.store import Neo4jPaperStore, load_neo4j_config
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = ROOT / "backend" / "extract" / "prompts"
@@ -136,6 +139,66 @@ def build_pdf_input_data(pdf_path: Path, extracted_text: str) -> dict:
     }
 
 
+def normalize_string(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def normalize_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    cleaned: list[str] = []
+    for item in value:
+        text = normalize_string(item)
+        if text:
+            cleaned.append(text)
+    return cleaned
+
+
+def build_local_pdf_id(pdf_path: Path) -> str:
+    digest = hashlib.sha256()
+    with pdf_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return f"localpdf:{digest.hexdigest()[:16]}"
+
+
+def build_paper_record_for_arxiv(arxiv_id: str, metadata: dict, extracted_json: dict) -> dict:
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return {
+        "id": f"arxiv:{arxiv_id}",
+        "source_url": f"https://arxiv.org/abs/{arxiv_id}",
+        "title": normalize_string(extracted_json.get("title")) or metadata.get("title"),
+        "authors": normalize_string_list(extracted_json.get("authors")) or metadata.get("authors", []),
+        "published": metadata.get("published"),
+        "summary": normalize_string(extracted_json.get("summary")),
+        "concepts": normalize_string_list(extracted_json.get("concepts")),
+        "methods": normalize_string_list(extracted_json.get("methods")),
+        "domain": normalize_string(extracted_json.get("domain")),
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+
+
+def build_paper_record_for_pdf(pdf_path: Path, extracted_json: dict) -> dict:
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return {
+        "id": build_local_pdf_id(pdf_path),
+        "source_url": pdf_path.resolve().as_uri(),
+        "title": normalize_string(extracted_json.get("title")) or pdf_path.stem,
+        "authors": normalize_string_list(extracted_json.get("authors")),
+        "published": None,
+        "summary": normalize_string(extracted_json.get("summary")),
+        "concepts": normalize_string_list(extracted_json.get("concepts")),
+        "methods": normalize_string_list(extracted_json.get("methods")),
+        "domain": normalize_string(extracted_json.get("domain")),
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+
+
 def format_claude_prompt(prompt: str, input_data: dict) -> str:
     input_json = json.dumps(input_data, indent=2)
     return f"{prompt}\n\nINPUT JSON:\n{input_json}\n"
@@ -205,6 +268,7 @@ def main() -> None:
     parser.add_argument("arxiv_id", nargs="?", help="The arXiv ID, e.g. 2301.04567")
     parser.add_argument("--pdf", help="Path to a local PDF file to extract instead of fetching from arXiv")
     parser.add_argument("--preview", action="store_true", help="Show prompt preview without calling Claude")
+    parser.add_argument("--store", action="store_true", help="Write the resulting Paper node to Neo4j")
     parser.add_argument("--model", default=CLAUDE_MODEL, help="Claude model ID (default: claude-haiku-4-5-20251001)")
     args = parser.parse_args()
 
@@ -273,6 +337,8 @@ def main() -> None:
     if args.preview or not api_key:
         if api_key:
             print("WARNING: `CLAUDE_API_KEY` is set, but `--preview` was requested. No API call will be made.")
+        elif args.store:
+            print("WARNING: `--store` was requested, but no `CLAUDE_API_KEY` is set. No Neo4j write will be made.")
         print("\n--- Extraction prompt (preview) ---\n")
         print(prompt)
         print("\n--- Extraction input JSON (preview) ---\n")
@@ -289,7 +355,29 @@ def main() -> None:
         print("Claude returned invalid or unparsable output. No data has been written.")
         return
 
-    print(json.dumps(extracted_json, indent=2))
+    if args.pdf:
+        paper_record = build_paper_record_for_pdf(pdf_path, extracted_json)
+    else:
+        paper_record = build_paper_record_for_arxiv(arxiv_id, metadata, extracted_json)
+
+    if not args.store:
+        print(json.dumps(extracted_json, indent=2))
+        return
+
+    try:
+        store = Neo4jPaperStore(load_neo4j_config())
+        try:
+            store.verify_connectivity()
+            store.ensure_schema()
+            stored_paper = store.upsert_paper(paper_record)
+        finally:
+            store.close()
+    except Exception as exc:
+        print(f"Neo4j write failed: {exc}")
+        print("Structured extraction succeeded, but no data has been written.")
+        return
+
+    print(json.dumps(stored_paper, indent=2))
 
 
 if __name__ == "__main__":

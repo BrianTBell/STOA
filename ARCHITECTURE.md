@@ -8,13 +8,13 @@ This document captures the stack and the pipeline. Update it whenever a meaningf
 |-------|--------|-----|
 | Language (backend) | Python 3.11+ | Owner's strongest language; best ecosystem for ML/LLM work |
 | Web framework | FastAPI | Modern, async, automatic OpenAPI docs, minimal boilerplate |
-| Graph database | Neo4j | Built for graphs; native Cypher; has a vector index for embedding similarity |
+| Graph database | Neo4j (AuraDB Free or local instance) | Built for graphs; native Cypher; has a vector index for embedding similarity |
 | Embedding model | `sentence-transformers` (default: `all-MiniLM-L6-v2`) | Local, free, fast, runs on CPU, good enough for prototype |
 | LLM | Claude API (Haiku 4.5 default; Sonnet via `--model`) | Haiku handles structured JSON extraction at ~3-4x lower cost; Sonnet remains available for comparison or complex cases |
 | Frontend | React + a graph viz library | Best ecosystem for graph UIs; library choice deferred to Phase 6 |
 | Source API | arXiv API | Free, well-documented, full-text accessible |
 
-Local development assumes Neo4j Desktop or a Docker container. Production hosting is out of scope.
+Phase 2 storage is designed to work against any Neo4j instance reachable through `.env` settings. AuraDB Free is the default hosted path for this repo because it avoids local infrastructure friction while keeping the same driver and Cypher model we would use later in a deployed prototype.
 
 ## Pipeline
 
@@ -42,7 +42,7 @@ End-to-end flow from a new source URL to a queryable node with edges:
                           │
                           ▼
                   [Write Neo4j node]
-                   JSON attrs + embedding + confidence
+                   core paper properties (Phase 2)
                           │
                           ▼
                   [Edge generation]
@@ -88,6 +88,14 @@ Phase 1 ingestion now supports two input paths:
 
 Phase 1 extraction uses separate prompt files for these paths so the arXiv flow can rely on trusted bibliographic metadata while the PDF flow treats the document text as the primary source of truth.
 
+### Phase 2 note
+
+Phase 2 storage adds these CLI entrypoints:
+
+- `python -m backend.ingest <arxiv_id> --store`
+- `python -m backend.ingest --pdf <path> --store`
+- `python -m backend.store list`
+
 ## Repo layout
 
 ```
@@ -119,5 +127,5 @@ Folder structure should grow as needed, not be created speculatively.
 
 - All secrets (Claude API key, Neo4j password) live in a `.env` file at the repo root
 - `.env` is gitignored; `.env.example` is checked in
-- Configuration loaded via `pydantic-settings` or equivalent
+- Configuration loaded from environment variables at runtime
 - No hardcoded paths or keys anywhere in code

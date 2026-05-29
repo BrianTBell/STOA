@@ -32,4 +32,55 @@ All considered I think, and hope this PDF parsing pipeline will be able to hold 
 
 
 -------------------- Phase 2 --------------------
-Working it now...
+I came back today for Phase 2, quick note to self on Phase 2 CLI commands...
+
+python -m backend.ingest <arxiv_id> --store
+python -m backend.ingest --pdf <path> --store
+python -m backend.store list
+python -m backend.store get <paper_id>
+
+Anyway, Phase 1 handled article ingestion, Phase 2 is gets at storing the info. Went with a free Neo4j account with this that will
+give some 200k nodes and 400k relationships. I think thats good for a prototype? We'll see. Parsed info from phase 1 ingestion 
+pipeline will get gets cleaned, converted to a dict, then shot to neo4j to be merged into the DB as a new paper. It does check
+for unique ID constraints, which at this point is either an ArXiv ID, or PDF hash string. the extracted fields from the DB
+get written as the paper nodes properties then neo4j returns the stored node.
+
+That is the basic pipeline, I also added ways to query a single paper, list all, and delete papers as shown above, kind of. Here's
+an example of a training paper's fingerprint queried from the DB.
+
+[
+  {
+    "summary": "This paper provides a comprehensive introduction to reinforcement learning (RL), covering fundamental concepts such as states, actions, policies, rewards, and transition dynamics. It presents an overview of RL algorithms categorized by key factors including model-free, model-based, value-based, and policy-based approaches, along with resources for learning and implementation.",
+    "concepts": [
+      "reinforcement learning",
+      "markov decision process",
+      "policy",
+      "reward function",
+      "value function",
+      "model-free methods",
+      "model-based methods",
+      "multi-armed bandit"
+    ],
+    "updated_at": "2026-05-29T18:10:36.782670+00:00",
+    "methods": [
+      "policy gradient methods",
+      "proximal policy optimization",
+      "value-based learning",
+      "policy-based learning"
+    ],
+    "domain": "reinforcement learning",
+    "created_at": "2026-05-29T18:10:36.782670+00:00",
+    "id": "localpdf:bd708036be63e6a1",
+    "title": "Introduction to Reinforcement Learning",
+    "source_url": "somewhere on my pc :)",
+    "authors": [
+      "Majid Ghasemi",
+      "Dariush Ebrahimi"
+    ]
+  }
+]
+
+
+
+-------------------- Phase 3 --------------------
+Working it now

@@ -12,7 +12,9 @@ The graph is intentionally loose. Schema emerges from data rather than being def
 
 ### Paper node
 
-The primary node type in Phase 1. Represents one ingested source.
+The primary node type in the graph. Represents one ingested source.
+
+Phase 2 stores the core bibliographic and extraction fields first. Later phases add `embedding`, `confidence`, `confidence_rationale`, and community signal fields.
 
 ```json
 {
@@ -27,20 +29,14 @@ The primary node type in Phase 1. Represents one ingested source.
   "methods": ["canonical term", "..."],
   "domain": "canonical term",
 
-  "embedding": [0.0, 0.0, "..."],
-
-  "confidence": 0.0,
-  "confidence_rationale": "Claude's short explanation",
-  "community_score": 0.0,
-
   "created_at": "ISO 8601 timestamp",
   "updated_at": "ISO 8601 timestamp"
 }
 ```
 
-`embedding` dimensionality is set by the embedding model (384 for `all-MiniLM-L6-v2`). It is indexed via Neo4j's vector index for similarity queries.
+Later phases add `embedding`, `confidence`, and `confidence_rationale` as additional properties on the same `Paper` node.
 
-`confidence` is the initial AI-scored quality. `community_score` is a separate field that accumulates votes once a community layer exists. They are kept separate so the AI signal is preserved and auditable.
+For local PDFs, `id` uses the `localpdf:` prefix with a stable hash of the file bytes, and `source_url` is stored as a `file:///...` URI pointing at the local document.
 
 ### Vocabulary node
 
@@ -98,7 +94,7 @@ At submission, Claude scores the paper on a 0–1 scale based on observable prox
 - Depth of reasoning
 - Absence of obvious red flags (fabricated content, fallacies, spam)
 
-The score and a short rationale are stored on the node. Low-confidence nodes are not rejected — they exist in the graph but surface less prominently in the UI. Community votes (when implemented) flow into `community_score`, which the UI weights alongside `confidence`.
+The score and a short rationale are stored on the node. Low-confidence nodes are not rejected — they exist in the graph but surface less prominently in the UI. Community voting is deferred to the later community layer instead of being stored in Phase 2.
 
 ## Constraints worth preserving
 

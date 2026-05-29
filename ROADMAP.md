@@ -19,7 +19,7 @@ Phases run in order. Do not start the next phase until the current phase is veri
 **Goal:** Write the extracted JSON to Neo4j as a paper node and read it back.
 
 **Done when:**
-- Local Neo4j is running (Docker or Desktop, owner's choice)
+- A Neo4j instance is running and reachable from the backend (AuraDB Free, Desktop, or Docker)
 - A node is written for each ingested paper with all attributes from Phase 1
 - A simple CLI command can list all nodes in the graph
 - `SCHEMA.md` matches what's actually being written
