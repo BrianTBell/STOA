@@ -1,0 +1,13 @@
+.env
+.claude/
+backend/ingest/training_docs/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.idea/
+.vscode/
+.DS_Store

@@ -4,12 +4,13 @@ Phases run in order. Do not start the next phase until the current phase is veri
 
 ## Phase 1 — Ingestion and extraction
 
-**Goal:** A Python script that takes an arXiv ID, fetches the paper, sends it to Claude, and prints structured JSON to the terminal.
+**Goal:** A Python script that can ingest either an arXiv paper or a local PDF, send the paper text to Claude, and print structured JSON to the terminal.
 
 **Done when:**
 - Running `python -m backend.ingest <arxiv_id>` produces JSON with `title`, `authors`, `summary`, `concepts`, `methods`, `domain`
+- Running `python -m backend.ingest --pdf <path_to_pdf>` produces JSON with `title`, `authors`, `summary`, `concepts`, `methods`, `domain`
 - The owner has reviewed at least 5 papers worth of output and trusts the extraction quality
-- The Claude prompt is captured in a versioned file under `backend/extract/prompts/`
+- The Claude prompts are captured in versioned files under `backend/extract/prompts/`
 
 **Out of scope:** Neo4j, embeddings, scoring, vocab — all deferred. Just text in, JSON out.
 

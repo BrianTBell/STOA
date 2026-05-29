@@ -10,7 +10,7 @@ This document captures the stack and the pipeline. Update it whenever a meaningf
 | Web framework | FastAPI | Modern, async, automatic OpenAPI docs, minimal boilerplate |
 | Graph database | Neo4j | Built for graphs; native Cypher; has a vector index for embedding similarity |
 | Embedding model | `sentence-transformers` (default: `all-MiniLM-L6-v2`) | Local, free, fast, runs on CPU, good enough for prototype |
-| LLM | Claude API (Sonnet) | High-quality extraction and reasoning; cheap at prototype scale |
+| LLM | Claude API (Haiku 4.5 default; Sonnet via `--model`) | Haiku handles structured JSON extraction at ~3-4x lower cost; Sonnet remains available for comparison or complex cases |
 | Frontend | React + a graph viz library | Best ecosystem for graph UIs; library choice deferred to Phase 6 |
 | Source API | arXiv API | Free, well-documented, full-text accessible |
 
@@ -78,6 +78,15 @@ Feedback loops:
 **API** — `backend/api/`. FastAPI app exposing endpoints for ingestion triggers, graph queries, and (later) the AI assistant.
 
 **Frontend** — `frontend/`. React app. Visualization library chosen in Phase 6.
+
+### Phase 1 note
+
+Phase 1 ingestion now supports two input paths:
+
+- `python -m backend.ingest <arxiv_id>` fetches metadata and PDF text from arXiv
+- `python -m backend.ingest --pdf <path>` reads a local PDF and extracts text directly
+
+Phase 1 extraction uses separate prompt files for these paths so the arXiv flow can rely on trusted bibliographic metadata while the PDF flow treats the document text as the primary source of truth.
 
 ## Repo layout
 
