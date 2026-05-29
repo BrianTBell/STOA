@@ -83,4 +83,23 @@ an example of a training paper's fingerprint queried from the DB.
 
 
 -------------------- Phase 3 --------------------
-Working it now
+This phase handles embedding. The idea a papers fingerprint as shown above and convert it into an embedding which we can create
+a vector index with. The two big things here are the python framework sentence-transformers, and again Neo4j 
+
+A tangent, the concept of embeddings recently clicked for me. This is two years after first heard about it. 
+Back then an into ML lecturer gave me an example where a CNN breaks images down into... data (he didnt really explain)... then it 
+can use this info to distinguish between different things. The example he gave was a graph with a straight line, with a dog on one 
+side, and a cat on the other. "Classification" he said. incredible. I've recently been reading Rashka's, Build an LLM from Scratch, 
+which explains this much, much better. Beyond that, this project phase has been an awesome way to really apply it. 
+
+The attributes of a paper ingested will now be parsed by an all-MiniLM-L6-v2 embedding model into a 384-number embedding. Neo4j 
+is told to use the a queryable vector. Queried similarity between a few papers and got pretty promising results...
+"Introduction to Reinforcement Learning" matches "Reinforcement Learning: A Survey" at 0.9003 and "A Tutorial Introduction to 
+Reinforcement Learning" at 0.8883 which is pretty cool.
+
+This has kind of been shoved into the previous pipeline, so at a high level its now working like is now like:
+upload source paper → extract text → claude extracts fields → sentence-transformers creates embedding → kick to Neo4j, store, & create vector index.
+
+
+
+-------------------- Phase 4 --------------------

@@ -24,6 +24,7 @@ import requests
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 
+from backend.embed import build_embedding_input, embed_text
 from backend.store import Neo4jPaperStore, load_neo4j_config
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -364,11 +365,15 @@ def main() -> None:
         print(json.dumps(extracted_json, indent=2))
         return
 
+    print("Generating embedding from stored paper fields...")
+    paper_record["embedding"] = embed_text(build_embedding_input(paper_record))
+
     try:
         store = Neo4jPaperStore(load_neo4j_config())
         try:
             store.verify_connectivity()
             store.ensure_schema()
+            store.ensure_vector_index(len(paper_record["embedding"]))
             stored_paper = store.upsert_paper(paper_record)
         finally:
             store.close()

@@ -65,13 +65,13 @@ Feedback loops:
 
 **Extraction** — `backend/extract/`. Sends parsed text to the Claude API with a structured prompt. Returns JSON with `concepts`, `methods`, `domain`, and a short summary. Schema lives in `SCHEMA.md`.
 
-**Embedding** — `backend/embed/`. Runs `sentence-transformers` locally, returns a dense vector per document. Vector dimensionality is set by the model (384 for the default).
+**Embedding** — `backend/embed/`. Runs `sentence-transformers` locally, returns a dense vector per document. Because the full source text is discarded after extraction, embeddings are generated from the stored paper fields (`title`, `summary`, `concepts`, `methods`, `domain`) rather than the raw document text. Vector dimensionality is set by the model (384 for the default).
 
 **Confidence scoring** — `backend/score/`. Lightweight Claude call that returns a 0–1 confidence value with a short rationale. Stored on the node. **Not used as a filter** — purely a surfacing signal.
 
 **Vocabulary resolution** — `backend/vocab/`. Before writing extracted terms, queries the existing canonical vocabulary in Neo4j. Asks Claude to map new terms to existing canonical ones where appropriate, or propose new terms when nothing fits.
 
-**Storage** — `backend/store/`. Wraps the Neo4j driver. Owns Cypher queries, node and edge writes, vector index queries.
+**Storage** — `backend/store/`. Wraps the Neo4j driver. Owns Cypher queries, node and edge writes, vector index queries. Phase 3 similarity search uses Neo4j's `SEARCH` clause.
 
 **Edge generation** — `backend/edges/`. For a new node, uses Neo4j's vector index to find the top-N most similar existing nodes, then sends paper-pair summaries to Claude to label the relationship (e.g. `extends`, `contradicts`, `applies-to`).
 
@@ -95,6 +95,13 @@ Phase 2 storage adds these CLI entrypoints:
 - `python -m backend.ingest <arxiv_id> --store`
 - `python -m backend.ingest --pdf <path> --store`
 - `python -m backend.store list`
+
+### Phase 3 note
+
+Phase 3 extends the storage flow so new ingests compute an embedding before the Neo4j write. It also adds these CLI entrypoints:
+
+- `python -m backend.store embed-all`
+- `python -m backend.store similar <paper_id>`
 
 ## Repo layout
 
