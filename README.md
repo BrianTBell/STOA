@@ -1,4 +1,4 @@
-# Pergamum
+# STOA
 A community curated knowledge web.
 
 I find research to be difficult. In part, its because I struggle to get a lay of the land. As with anything, when I emmerse myself, the charcters, concepts, and and ties between them become clearer. I guess I could say that at first, I dont know what I dont know, and that's tough.
