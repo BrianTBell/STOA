@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 
 from backend.embed import build_embedding_input, embed_text
+from backend.screen import build_intake_screen_input, validate_intake_screen_result
 from backend.store import Neo4jPaperStore, load_neo4j_config
 from backend.vocab import resolve_paper_vocabulary
 
@@ -32,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = ROOT / "backend" / "extract" / "prompts"
 ARXIV_PROMPT_PATH = PROMPTS_DIR / "extraction_prompt_v1.txt"
 PDF_PROMPT_PATH = PROMPTS_DIR / "extraction_prompt_pdf_v1.txt"
+INTAKE_SCREEN_PROMPT_PATH = PROMPTS_DIR / "intake_screen_prompt_v1.txt"
 CLAUDE_DEFAULT_BASE = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 ANTHROPIC_API_VERSION = "2023-06-01"
@@ -306,11 +308,17 @@ def main() -> None:
             extracted = ""
 
         if not extracted:
-            print("Error: Could not extract any text from the PDF. It may be unreadable or not a valid PDF.")
+            print(json.dumps({"intake_screen": {"decision": "reject", "rationale": "Could not extract any text from this PDF. It may be a scanned image without a text layer, or an unreadable or corrupted file."}}, indent=2))
             return
 
         prompt = load_prompt(PDF_PROMPT_PATH)
         input_data = build_pdf_input_data(pdf_path, extracted)
+        intake_screen_input = build_intake_screen_input(
+            source_type="pdf",
+            source_label=pdf_path.name,
+            extracted_text_preview=input_data["extracted_text_preview"],
+            extracted_text_full=input_data["extracted_text_full"],
+        )
     else:
         arxiv_id = args.arxiv_id
         print(f"Fetching metadata for {arxiv_id}...")
@@ -328,7 +336,7 @@ def main() -> None:
                 extracted = ""
 
         if not extracted:
-            print("Error: Could not extract any text from the PDF. It may be unreadable or not a valid PDF.")
+            print(json.dumps({"intake_screen": {"decision": "reject", "rationale": "Could not extract any text from this PDF. It may be a scanned image without a text layer, or an unreadable or corrupted file."}}, indent=2))
             return
 
         skeleton = build_skeleton(arxiv_id, metadata, extracted)
@@ -341,16 +349,56 @@ def main() -> None:
             "extracted_text_preview": skeleton["extracted_text_preview"],
             "extracted_text_full": truncate_text_for_prompt(extracted),
         }
+        intake_screen_input = build_intake_screen_input(
+            source_type="arxiv",
+            source_label=skeleton["source_url"],
+            title=skeleton["title"],
+            authors=skeleton["authors"],
+            published=skeleton["published"],
+            extracted_text_preview=input_data["extracted_text_preview"],
+            extracted_text_full=input_data["extracted_text_full"],
+        )
 
     if args.preview or not api_key:
+        intake_prompt = load_prompt(INTAKE_SCREEN_PROMPT_PATH)
         if api_key:
             print("WARNING: `CLAUDE_API_KEY` is set, but `--preview` was requested. No API call will be made.")
         elif args.store:
             print("WARNING: `--store` was requested, but no `CLAUDE_API_KEY` is set. No Neo4j write will be made.")
+        print("\n--- Intake screen prompt (preview) ---\n")
+        print(intake_prompt)
+        print("\n--- Intake screen input JSON (preview) ---\n")
+        print(json.dumps(intake_screen_input, indent=2)[:20000])
         print("\n--- Extraction prompt (preview) ---\n")
         print(prompt)
         print("\n--- Extraction input JSON (preview) ---\n")
         print(json.dumps(input_data, indent=2)[:20000])
+        return
+
+    print("Running input quality screen...")
+    intake_prompt = load_prompt(INTAKE_SCREEN_PROMPT_PATH)
+    intake_full_prompt = format_claude_prompt(intake_prompt, intake_screen_input)
+    try:
+        intake_result = validate_intake_screen_result(
+            query_claude_json(intake_full_prompt, api_key, api_base, model=args.model)
+        )
+    except Exception as exc:
+        print(f"Error: {exc}")
+        print("Input quality screen failed. No data has been written.")
+        return
+
+    if not intake_result.accepted:
+        print(
+            json.dumps(
+                {
+                    "intake_screen": {
+                        "decision": intake_result.decision,
+                        "rationale": intake_result.rationale,
+                    }
+                },
+                indent=2,
+            )
+        )
         return
 
     print("Calling Claude to extract structured JSON...")
@@ -413,6 +461,10 @@ def main() -> None:
     print(
         json.dumps(
             {
+                "intake_screen": {
+                    "decision": intake_result.decision,
+                    "rationale": intake_result.rationale,
+                },
                 "paper": stored_paper,
                 "vocabulary_resolution": resolution_result.resolution_log,
                 "similarity_edges": similarity_edges,

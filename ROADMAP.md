@@ -57,16 +57,17 @@ Phases run in order. Do not start the next phase until the current phase is veri
 - A simple CLI command can inspect edges for a paper
 - The owner has reviewed similarity-edge behavior across a varied set of papers
 
-## Phase 6 - Confidence scoring
+## Phase 6 - Input quality screening
 
-**Goal:** Every node has an AI-assigned confidence score.
+**Goal:** Obvious junk, spam, or non-paper uploads are screened out before extraction.
 
 **Done when:**
-- A Claude call returns a 0-1 confidence and rationale for each ingested paper
-- Score and rationale are stored on the node
-- The owner has reviewed scoring behavior across a varied set of papers
+- After PDF text extraction, a Claude call returns a structured intake decision for each upload
+- The decision distinguishes between acceptable academic-paper input and obvious junk / unusable content
+- Rejected uploads return a short rationale and do not proceed to attribute extraction, vocab resolution, embedding, or graph writes
+- The owner has reviewed screening behavior across a varied set of papers and a few intentionally bad inputs
 
-This phase intentionally comes after edges because edges are the more important signal. Confidence is added once the core graph structure is producing value.
+This phase intentionally comes after edges because the core graph structure matters more than intake hardening during early prototype work. The screening step is meant to block obvious garbage, not to judge whether a legitimate paper is good science.
 
 ## Phase 7 - API
 

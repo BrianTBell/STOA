@@ -13,7 +13,7 @@ A **living ontology** — a graph that grows continuously as content is ingested
 ## Philosophy
 
 - **AI structures, humans value.** AI does the mechanical work of parsing, embedding, extracting concepts, and proposing connections. Humans decide what's worth surfacing through votes and refinement.
-- **Honor-based curation.** No gatekeepers. Quality emerges through community signal over time. Nothing is rejected at the door; low-quality content simply doesn't surface.
+- **Honor-based curation.** No gatekeepers on ideas or academic quality. Quality emerges through community signal over time. The only intake rejection is for obvious junk input that does not appear to be a real academic paper or contains too little usable content to parse.
 - **Concepts over citations.** Edges represent conceptual relationships between ideas, not citation graphs. Citation lineage is at best an optional secondary lens.
 - **Copyright-clean by construction.** Source content is parsed for its meaning and then discarded. Nodes hold structured summaries, embeddings, and a link back to the original — never the original itself.
 - **Schema emerges from data.** Node attributes are not predefined. They are extracted from content and reconciled against an evolving canonical vocabulary so the graph self-organizes without becoming a tag soup.

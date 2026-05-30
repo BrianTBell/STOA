@@ -6,7 +6,7 @@ The graph is intentionally loose. Schema emerges from data rather than being def
 
 - **Loose attributes.** Nodes carry whatever attributes Claude extracts from content. They are stored as properties on the node and queried flexibly.
 - **Canonical vocabulary.** Despite loose attributes, the *values* of certain attributes (concepts, methods, domain) are reconciled against a canonical vocabulary so the graph doesn't fragment into near-duplicate tags.
-- **Confidence everywhere.** Every node has an AI-estimated confidence score at submission. Community votes adjust it over time. It's a signal, not a filter.
+- **Clean intake.** Inputs should look like real academic papers before they enter the rest of the pipeline. Obvious junk or unusable content is rejected early with a short rationale.
 
 ## Nodes
 
@@ -14,7 +14,7 @@ The graph is intentionally loose. Schema emerges from data rather than being def
 
 The primary node type in the graph. Represents one ingested source.
 
-Phase 2 stores the core bibliographic and extraction fields first. Later phases add `embedding`, `confidence`, `confidence_rationale`, and community signal fields.
+Phase 2 stores the core bibliographic and extraction fields first. Later phases add `embedding` and, if the product later needs it, community signal fields.
 
 ```json
 {
@@ -34,7 +34,7 @@ Phase 2 stores the core bibliographic and extraction fields first. Later phases 
 }
 ```
 
-Later phases add `embedding`, `confidence`, and `confidence_rationale` as additional properties on the same `Paper` node.
+Later phases add `embedding` as an additional property on the same `Paper` node.
 
 For local PDFs, `id` uses the `localpdf:` prefix with a stable hash of the file bytes, and `source_url` is stored as a `file:///...` URI pointing at the local document.
 
@@ -86,16 +86,14 @@ When a new paper is ingested, Claude extracts raw concept/method/domain terms. B
 
 New canonical terms are written to the vocabulary store and become available for the next paper. The graph's vocabulary grows organically and self-stabilizes as common terms solidify.
 
-## Confidence scoring
+## Input quality screening
 
-At submission, Claude scores the paper on a 0-1 scale based on observable proxies for quality:
+Before attribute extraction, Claude performs a lightweight intake check on the extracted text and returns:
 
-- Logical coherence
-- Presence of evidence and methodology
-- Depth of reasoning
-- Absence of obvious red flags (fabricated content, fallacies, spam)
+- `accept` or `reject`
+- a short rationale
 
-The score and a short rationale are stored on the node. Low-confidence nodes are not rejected - they exist in the graph but surface less prominently in the UI. Community voting is deferred to the later community layer instead of being stored in Phase 2.
+The purpose is narrow: reject obvious spam, malformed uploads, or non-paper content before the pipeline spends more tokens on extraction, vocab resolution, embeddings, and graph writes. This is not a scientific-merit judgment and it is not stored as an enduring quality score on the paper node.
 
 ## Constraints worth preserving
 

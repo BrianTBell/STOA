@@ -178,4 +178,23 @@ cooler, somehow.
 
 
 -------------------- Phase 6 --------------------
-Coming soon...
+Today I pushed from a somewhat complete phase one trough a complete phase 6. I am tired, but happy. Digressing, phase 6 was initially about
+creating a baseline confidence signal for paper quality. I set this goal up when I was planning the project, before I actually implemented
+anything. When I came across this it kind of made me roll my eyes.  I don't think haiku, or claude should be creating a baseline signal.
+To some extent, I don't think haiku will be well trained enough to derive an accurate quality signal. In another sense I don't think AI 
+should be rating someones work. Probably best for the community to do it. And even with that, there's not perfect voting method. I'd need to 
+figure out a way where some small group cant gate keep either. Maybe anonymous community voting as a baseline, I'd have to read into it.   
+
+Back to this project... I redirected phase six toward implementing a simple preliminary screening phase in the pipeline. The idea is to 
+stop people from uploading garbage. Claude does a quick check for things like basic academic structure, technical contents. I tested this
+with two academic papers, one newspaper from the 60's and one from the 80's. screens passed on the academic papers. The 80's was rejected 
+due to its contents (win), and the 60's was rejected because it couldn't be scanned. That 60's one was actually a failure mode I hadn't tested.
+It failed hard, so I added an softer super duper elegant failure. 
+
+This phase was a lot easier than others, but obviously it was made simpler through the redirection. Regardless, I'm happy with it all.
+One step closer to a GUI to play with.
+
+
+
+-------------------- Phase 7 --------------------
+Coming Soon...

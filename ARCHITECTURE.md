@@ -11,7 +11,7 @@ This document captures the stack and the pipeline. Update it whenever a meaningf
 | Graph database | Neo4j (AuraDB Free or local instance) | Built for graphs; native Cypher; has a vector index for embedding similarity |
 | Embedding model | `sentence-transformers` (default: `all-MiniLM-L6-v2`) | Local, free, fast, runs on CPU, good enough for prototype |
 | LLM | Claude API (Haiku 4.5 default; Sonnet via `--model`) | Haiku handles structured JSON extraction at ~3-4x lower cost; Sonnet remains available for comparison or complex cases |
-| Frontend | React + a graph viz library | Best ecosystem for graph UIs; library choice deferred to Phase 6 |
+| Frontend | React + a graph viz library | Best ecosystem for graph UIs; library choice deferred to Phase 8 |
 | Source API | arXiv API | Free, well-documented, full-text accessible |
 
 Phase 2 storage is designed to work against any Neo4j instance reachable through `.env` settings. AuraDB Free is the default hosted path for this repo because it avoids local infrastructure friction while keeping the same driver and Cypher model we would use later in a deployed prototype.
@@ -27,34 +27,37 @@ End-to-end flow from a new source URL to a queryable node with edges:
 [Fetch + parse text]  ---- discard source content (copyright-clean)
      |
      v
-   +--------------------+--------------------+
-   v                    v                    v
-[Claude extraction] [Embedding]      [Confidence score]
- concepts, methods, semantic         AI-estimated
- domain (JSON)     vector            quality signal
-   |                    |                    |
-   v                    |                    |
-[Vocab resolution]      |                    |
- reconcile terms        |                    |
- against canonical set  |                    |
-   |                    |                    |
-   +--------------------+--------------------+
-                        |
-                        v
-                [Write Neo4j node]
-                 core paper properties (Phase 2)
-                        |
-                        v
-                [Edge generation]
-                 vector index -> top-N neighbors
-                 -> writes SIMILAR_TO edges + score
-                        |
-                        v
-                [FastAPI -> React UI]
-                 layered exploration + AI assistant queries
+   |
+   v
+[Claude intake screen]
+ accept/reject + short rationale
+   |
+   v
+[Claude extraction] ---- [Embedding]
+ concepts, methods,      semantic
+ domain (JSON)           vector
+   |                         |
+   v                         |
+[Vocab resolution]           |
+ reconcile terms             |
+ against canonical set       |
+   |                         |
+   +-------------------------+
+             |
+             v
+     [Write Neo4j node]
+      core paper properties
+             |
+             v
+     [Edge generation]
+      vector index -> top-N neighbors
+      -> writes SIMILAR_TO edges + score
+             |
+             v
+     [FastAPI -> React UI]
+      layered exploration + AI assistant queries
 
 Feedback loops:
-  - Community votes -> adjust confidence on existing nodes
   - Edge generation -> queries Neo4j's vector index
 ```
 
@@ -66,7 +69,7 @@ Feedback loops:
 
 **Embedding** - `backend/embed/`. Runs `sentence-transformers` locally, returns a dense vector per document. Because the full source text is discarded after extraction, embeddings are generated from the stored paper fields (`title`, `summary`, `concepts`, `methods`, `domain`) rather than the raw document text. Vector dimensionality is set by the model (384 for the default).
 
-**Confidence scoring** - `backend/score/`. Lightweight Claude call that returns a 0-1 confidence value with a short rationale. Stored on the node. **Not used as a filter** - purely a surfacing signal.
+**Input quality screening** - `backend/screen/`. Lightweight Claude call immediately after text extraction. Returns an accept/reject intake decision with a short rationale based on whether the upload appears to be a real academic paper with enough usable content to parse. This is a junk-input screen, not a scientific-merit score.
 
 **Vocabulary resolution** - `backend/vocab/`. Before writing extracted terms, queries the existing canonical vocabulary in Neo4j. Exact canonical terms and known aliases resolve locally first. Only unresolved terms go to Claude, along with the canonical terms from the same attribute type.
 
@@ -76,7 +79,7 @@ Feedback loops:
 
 **API** - `backend/api/`. FastAPI app exposing endpoints for ingestion triggers, graph queries, and (later) the AI assistant.
 
-**Frontend** - `frontend/`. React app. Visualization library chosen in Phase 6.
+**Frontend** - `frontend/`. React app. Visualization library chosen in Phase 8.
 
 ### Phase 1 note
 
@@ -114,6 +117,10 @@ Phase 5 extends the store path so each newly written paper regenerates its outgo
 
 - `python -m backend.store edges <paper_id>`
 
+### Phase 6 note
+
+Phase 6 inserts a lightweight intake screen between text extraction and attribute extraction. Obvious junk, spam, malformed OCR sludge, or non-paper uploads stop there with a short rationale instead of consuming more Claude calls and graph writes.
+
 ## Repo layout
 
 ```
@@ -130,7 +137,7 @@ Phase 5 extends the store path so each newly written paper regenerates its outgo
 |   |-- extract/
 |   |-- embed/
 |   |-- vocab/
-|   |-- score/
+|   |-- screen/
 |   |-- store/
 |   |-- edges/
 |   |-- api/
