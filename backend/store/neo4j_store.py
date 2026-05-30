@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 from neo4j import GraphDatabase
@@ -36,6 +37,12 @@ class Neo4jPaperStore:
         with self._driver.session() as session:
             session.run(paper_query).consume()
             session.run(vocab_query).consume()
+
+    def _now_iso(self) -> str:
+        return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    def _canonical_pair(self, paper_id_a: str, paper_id_b: str) -> tuple[str, str]:
+        return tuple(sorted((paper_id_a, paper_id_b)))
 
     def ensure_vector_index(self, dimensions: int) -> None:
         query = """
@@ -232,11 +239,148 @@ class Neo4jPaperStore:
 
         return self._find_similar_papers(paper_id, embedding, limit)
 
+    def regenerate_similarity_edges(
+        self,
+        paper_id: str,
+        limit: int = 3,
+        min_score: float = 0.80,
+    ) -> list[dict[str, Any]]:
+        matches = [
+            match
+            for match in self.find_similar_papers(paper_id, limit=limit)
+            if match["score"] >= min_score
+        ]
+        timestamp = self._now_iso()
+        upsert_query = """
+        UNWIND $matches AS match
+        MATCH (source:Paper {id: match.source_id})
+        MATCH (target:Paper {id: match.target_id})
+        MERGE (source)-[edge:SIMILAR_TO]->(target)
+        ON CREATE SET edge.created_at = $timestamp
+        SET
+            edge.score = CASE
+                WHEN edge.score IS NULL OR match.score > edge.score THEN match.score
+                ELSE edge.score
+            END,
+            edge.updated_at = $timestamp
+        RETURN source.id AS source_id, target.id AS target_id, edge.score AS score, edge.created_at AS created_at, edge.updated_at AS updated_at
+        ORDER BY score DESC
+        """
+
+        canonical_matches = []
+        for match in matches:
+            source_id, target_id = self._canonical_pair(paper_id, match["paper"]["id"])
+            canonical_matches.append(
+                {
+                    "source_id": source_id,
+                    "target_id": target_id,
+                    "score": match["score"],
+                }
+            )
+
+        with self._driver.session() as session:
+            result = session.run(
+                upsert_query,
+                timestamp=timestamp,
+                matches=canonical_matches,
+            )
+            written_edges = [
+                {
+                    "paper_id": record["target_id"] if record["source_id"] == paper_id else record["source_id"],
+                    "score": float(record["score"]),
+                    "created_at": record["created_at"],
+                    "updated_at": record["updated_at"],
+                }
+                for record in result
+            ]
+        self.normalize_all_similarity_edges()
+        return written_edges
+
+    def normalize_all_similarity_edges(self) -> None:
+        query = """
+        MATCH (left:Paper)-[edge:SIMILAR_TO]->(right:Paper)
+        RETURN left.id AS left_id, right.id AS right_id, edge.score AS score, edge.created_at AS created_at
+        """
+        rows: list[dict[str, Any]] = []
+        with self._driver.session() as session:
+            result = session.run(query)
+            rows = [dict(record) for record in result]
+
+        grouped: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in rows:
+            source_id, target_id = self._canonical_pair(row["left_id"], row["right_id"])
+            group = grouped.setdefault(
+                (source_id, target_id),
+                {
+                    "source_id": source_id,
+                    "target_id": target_id,
+                    "score": float(row["score"]) if row["score"] is not None else 0.0,
+                    "created_at": row["created_at"] or self._now_iso(),
+                },
+            )
+            if row["score"] is not None:
+                group["score"] = max(group["score"], float(row["score"]))
+            created_at = row["created_at"]
+            if created_at and created_at < group["created_at"]:
+                group["created_at"] = created_at
+
+        if not rows:
+            return
+
+        timestamp = self._now_iso()
+        delete_query = "MATCH ()-[edge:SIMILAR_TO]->() DELETE edge"
+        create_query = """
+        UNWIND $pairs AS pair
+        MATCH (source:Paper {id: pair.source_id})
+        MATCH (target:Paper {id: pair.target_id})
+        MERGE (source)-[edge:SIMILAR_TO]->(target)
+        SET
+            edge.score = pair.score,
+            edge.created_at = pair.created_at,
+            edge.updated_at = $timestamp
+        """
+        pairs = list(grouped.values())
+        with self._driver.session() as session:
+            session.run(delete_query).consume()
+            session.run(create_query, pairs=pairs, timestamp=timestamp).consume()
+
+    def list_similarity_edges(
+        self,
+        paper_id: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        if self.get_paper(paper_id) is None:
+            raise ValueError(f"Paper not found: {paper_id}")
+
+        query = """
+        MATCH (paper:Paper {id: $paper_id})
+        CALL (paper) {
+            MATCH (paper)-[edge:SIMILAR_TO]->(neighbor:Paper)
+            RETURN 'outgoing' AS direction, neighbor, edge
+            UNION ALL
+            MATCH (neighbor:Paper)-[edge:SIMILAR_TO]->(paper)
+            RETURN 'incoming' AS direction, neighbor, edge
+        }
+        RETURN direction, neighbor AS paper, edge
+        ORDER BY edge.score DESC, paper.id ASC
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, paper_id=paper_id, limit=limit)
+            return [
+                {
+                    "direction": record["direction"],
+                    "paper": dict(record["paper"]),
+                    "edge": dict(record["edge"]),
+                }
+                for record in result
+            ]
+
     def delete_paper(self, paper_id: str) -> bool:
         query = """
         MATCH (paper:Paper {id: $paper_id})
         WITH paper, count(paper) AS matches
-        DELETE paper
+        DETACH DELETE paper
         RETURN matches > 0 AS deleted
         """
         with self._driver.session() as session:

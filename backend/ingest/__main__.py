@@ -38,6 +38,8 @@ ANTHROPIC_API_VERSION = "2023-06-01"
 MAX_PROMPT_TEXT_CHARS = 11000
 MAX_RESPONSE_TOKENS = 1200
 ARXIV_MIN_RETRY_SECONDS = 3
+DEFAULT_SIMILAR_EDGE_NEIGHBORS = 3
+DEFAULT_SIMILAR_EDGE_MIN_SCORE = 0.80
 ARXIV_HEADERS = {
     "User-Agent": "STOA/0.1 (mailto:briantbell.work@gmail.com)",
 }
@@ -395,6 +397,12 @@ def main() -> None:
             paper_record["embedding"] = embed_text(build_embedding_input(paper_record))
             store.ensure_vector_index(len(paper_record["embedding"]))
             stored_paper = store.upsert_paper(paper_record)
+            print("Writing similarity edges from nearest neighbors...")
+            similarity_edges = store.regenerate_similarity_edges(
+                stored_paper["id"],
+                limit=DEFAULT_SIMILAR_EDGE_NEIGHBORS,
+                min_score=DEFAULT_SIMILAR_EDGE_MIN_SCORE,
+            )
         finally:
             store.close()
     except Exception as exc:
@@ -407,6 +415,7 @@ def main() -> None:
             {
                 "paper": stored_paper,
                 "vocabulary_resolution": resolution_result.resolution_log,
+                "similarity_edges": similarity_edges,
             },
             indent=2,
         )

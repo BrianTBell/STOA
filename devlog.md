@@ -122,4 +122,60 @@ in this technical domain. I imagine recognizing like technical terms is harder f
 This is at a point where there are still some weird alias merges, like live control → visual control, but overall this is good. My gut tells me
 not to add to the prompt for the sake of noise, and I might be hitting model limits. I'd be inclined to try on a stronger model later. I recognize
 the data will be a little poisoned moving forward with the current implementation, but I'm willing to work it later. Worst case I have the pleasure
-of doing large DB cleanup later, which could be another good learning opportunity. 
+of doing large DB cleanup later, which could be another good learning opportunity.
+
+
+
+-------------------- Phase 5 --------------------
+I think I have hit my first real road block. The plan was to have claude generate descriptive edges that would help the user navigate more intuitively
+through the graph. It would show semantics like BUILDS_ON, PRECURSOR_OF, CONTRADICTS, SIMILAR_TO on edges. Now that I'm implementing I foresee a real issue
+that slipped past me initially. Claude would have to analyze n nearest neighbors in full, and some of the papers are 50+ pages. That will heavy lifting 
+for my budget. The other option is to compare article footprints stored in Neo4j. The issue there is an abstract, title, and metadata labels definitely 
+aren't enough the elucidate if one paper builds on another, or was a precursor, etc. 
+
+I think a fair compromise is to rely on embedding proximity alone. This isn't as nice for users, but I'd rather say less and let the people figure it out,
+over potentially guiding them incorrectly. This can be done manually with python alone too, so that nice. 
+
+I'm using a somewhat arbitrary embedding proximity threshold of 0.8, which I plan on tuning later in testing. Each new papers has "similar to" connections
+added between it and its 3 nearest neighbors. I'm thinking this is a good, sparse number of edges for users to see, especially because technical papers
+can be so dense. Could be a cool quirk down the line to have some sort of reading or completion tracker like kahn academy of duolingo, but obviously way
+cooler, somehow.
+
+
+                             .-----.
+                            /7  .  (
+                           /   .-.  \
+                          /   /   \  \
+                         / `  )   (   )                *I've spent a total of 48 cents so far
+                        / `   )   ).  \
+                      .'  _.   \_/  . |             
+     .--.           .' _.' )`.        |
+    (    `---...._.'   `---.'_)    ..  \                        Forty-eight pennies—
+     \            `----....___    `. \  |                           
+      `.           _ ----- _   `._  )/  |                 the model thinks, therefore it is
+        `.       /"  \   /"  \`.  `._   |                       
+          `.    ((O)` ) ((O)` ) `.   `._\                       slightly less wealthy
+            `-- '`---'   `---' )  `.    `-.
+               /                  ` \      `-.
+             .'                      `.       `.
+            /                     `  ` `.       `-.
+     .--.   \ ===._____.======. `    `   `. .___.--`     .''''.
+    ' .` `-. `.                )`. `   ` ` \          .' . '  8)
+   (8  .  ` `-.`.               ( .  ` `  .`\      .'  '    ' /
+    \  `. `    `-.               ) ` .   ` ` \  .'   ' .  '  /
+     \ ` `.  ` . \`.    .--.     |  ` ) `   .``/   '  // .  /
+      `.  ``. .   \ \   .-- `.  (  ` /_   ` . / ' .  '/   .'
+        `. ` \  `  \ \  '-.   `-'  .'  `-.  `   .  .'/  .'
+          \ `.`.  ` \ \    ) /`._.`       `.  ` .  .'  /
+    LGB    |  `.`. . \ \  (.'               `.   .'  .'
+        __/  .. \ \ ` ) \                     \.' .. \__
+ .-._.-'     '"  ) .-'   `.                   (  '"     `-._.--.
+(_________.-====' / .' /\_)`--..__________..-- `====-. _________)
+                 (.'(.'
+
+                        (Thank you lgbeard)
+
+
+
+-------------------- Phase 6 --------------------
+Coming soon...

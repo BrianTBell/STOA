@@ -47,8 +47,7 @@ End-to-end flow from a new source URL to a queryable node with edges:
                         v
                 [Edge generation]
                  vector index -> top-N neighbors
-                 -> Claude reasons about pairs
-                 -> writes typed edges
+                 -> writes SIMILAR_TO edges + score
                         |
                         v
                 [FastAPI -> React UI]
@@ -73,7 +72,7 @@ Feedback loops:
 
 **Storage** - `backend/store/`. Wraps the Neo4j driver. Owns Cypher queries, node and edge writes, vector index queries. Phase 3 similarity search uses Neo4j's `SEARCH` clause.
 
-**Edge generation** - `backend/edges/`. For a new node, uses Neo4j's vector index to find the top-N most similar existing nodes, then sends paper-pair summaries to Claude to label the relationship (e.g. `extends`, `contradicts`, `applies-to`).
+**Edge generation** - `backend/edges/`. For a new node, uses Neo4j's vector index to find the top-N most similar existing nodes, then writes `SIMILAR_TO` edges with the returned similarity scores when they clear a minimum score threshold. This phase intentionally avoids a second Claude comparison pass because the structured paper footprint is not rich enough to justify fine-grained relationship claims at acceptable token cost.
 
 **API** - `backend/api/`. FastAPI app exposing endpoints for ingestion triggers, graph queries, and (later) the AI assistant.
 
@@ -108,6 +107,12 @@ Phase 3 extends the storage flow so new ingests compute an embedding before the 
 Phase 4 canonicalizes `concepts`, `methods`, and `domain` before writing the paper node. It also adds this CLI entrypoint:
 
 - `python -m backend.store vocab`
+
+### Phase 5 note
+
+Phase 5 extends the store path so each newly written paper regenerates its outgoing `SIMILAR_TO` edges from top-N vector neighbors. It also adds this CLI entrypoint:
+
+- `python -m backend.store edges <paper_id>`
 
 ## Repo layout
 

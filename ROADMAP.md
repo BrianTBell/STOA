@@ -2,7 +2,7 @@
 
 Phases run in order. Do not start the next phase until the current phase is verified working by the owner.
 
-## Phase 1 — Ingestion and extraction
+## Phase 1 - Ingestion and extraction
 
 **Goal:** A Python script that can ingest either an arXiv paper or a local PDF, send the paper text to Claude, and print structured JSON to the terminal.
 
@@ -12,9 +12,9 @@ Phases run in order. Do not start the next phase until the current phase is veri
 - The owner has reviewed at least 5 papers worth of output and trusts the extraction quality
 - The Claude prompts are captured in versioned files under `backend/extract/prompts/`
 
-**Out of scope:** Neo4j, embeddings, scoring, vocab — all deferred. Just text in, JSON out.
+**Out of scope:** Neo4j, embeddings, scoring, vocab - all deferred. Just text in, JSON out.
 
-## Phase 2 — Storage
+## Phase 2 - Storage
 
 **Goal:** Write the extracted JSON to Neo4j as a paper node and read it back.
 
@@ -26,7 +26,7 @@ Phases run in order. Do not start the next phase until the current phase is veri
 
 **Out of scope:** edges, embeddings, scoring, vocab.
 
-## Phase 3 — Embeddings
+## Phase 3 - Embeddings
 
 **Goal:** Add embeddings to every paper node and create a Neo4j vector index.
 
@@ -36,7 +36,7 @@ Phases run in order. Do not start the next phase until the current phase is veri
 - Neo4j vector index exists and can return top-N nearest neighbors for a given paper
 - A simple CLI command demonstrates "find similar papers to <id>"
 
-## Phase 4 — Vocabulary resolution
+## Phase 4 - Vocabulary resolution
 
 **Goal:** Extracted terms reconcile against a canonical vocabulary before being written.
 
@@ -46,28 +46,29 @@ Phases run in order. Do not start the next phase until the current phase is veri
 - New canonical terms are added when nothing matches
 - The owner can review the vocabulary and confirm it's not fragmenting into near-duplicates
 
-## Phase 5 — Edge generation
+## Phase 5 - Edge generation
 
-**Goal:** New papers automatically get conceptual edges to similar existing papers.
+**Goal:** New papers automatically get similarity edges to nearby existing papers.
 
 **Done when:**
-- For each new paper, the top-N nearest neighbors are found via the vector index
-- Claude reasons about each candidate pair and returns a relationship type and description
-- Edges are written to Neo4j with type, description, and confidence
-- The owner has reviewed edge quality across at least 20 papers and trusts the output
+- Backend writes `SIMILAR_TO` edges for new papers based on top-N nearest neighbors from the Neo4j vector index
+- Similarity edges are only written when the vector score clears the configured minimum threshold
+- Similarity score is stored on each edge
+- A simple CLI command can inspect edges for a paper
+- The owner has reviewed similarity-edge behavior across a varied set of papers
 
-## Phase 6 — Confidence scoring
+## Phase 6 - Confidence scoring
 
 **Goal:** Every node has an AI-assigned confidence score.
 
 **Done when:**
-- A Claude call returns a 0–1 confidence and rationale for each ingested paper
+- A Claude call returns a 0-1 confidence and rationale for each ingested paper
 - Score and rationale are stored on the node
 - The owner has reviewed scoring behavior across a varied set of papers
 
 This phase intentionally comes after edges because edges are the more important signal. Confidence is added once the core graph structure is producing value.
 
-## Phase 7 — API
+## Phase 7 - API
 
 **Goal:** A FastAPI server exposes the graph.
 
@@ -76,7 +77,7 @@ This phase intentionally comes after edges because edges are the more important 
 - OpenAPI docs render at `/docs`
 - The owner can hit each endpoint from the browser or curl and get sensible JSON
 
-## Phase 8 — Frontend (basic)
+## Phase 8 - Frontend (basic)
 
 **Goal:** A React app that renders the graph and lets the owner click around.
 
@@ -86,7 +87,7 @@ This phase intentionally comes after edges because edges are the more important 
 - Clicking a node shows its attributes and a link to the source
 - Layered/zoom navigation is sketched (does not need to be fully realized in this phase)
 
-## Phase 9 — AI assistant query layer
+## Phase 9 - AI assistant query layer
 
 **Goal:** Natural-language queries against the graph.
 
@@ -95,7 +96,7 @@ This phase intentionally comes after edges because edges are the more important 
 - Claude translates the question into a Cypher query or graph traversal
 - Results are rendered back to the user
 
-## Phase 10 — Community layer (future)
+## Phase 10 - Community layer (future)
 
 Out of scope for the immediate roadmap. When the time comes, this includes user accounts, voting, the `community_score` field becoming live, and contribution mechanics.
 

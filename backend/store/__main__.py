@@ -43,6 +43,10 @@ def main() -> None:
     similar_parser.add_argument("paper_id", help="Paper node id, e.g. arxiv:2301.04567")
     similar_parser.add_argument("--limit", type=int, default=5, help="Maximum number of similar papers to return")
 
+    edges_parser = subparsers.add_parser("edges", help="List similarity edges for one Paper node")
+    edges_parser.add_argument("paper_id", help="Paper node id, e.g. arxiv:2301.04567")
+    edges_parser.add_argument("--limit", type=int, default=20, help="Maximum number of edges to return")
+
     vocab_parser = subparsers.add_parser("vocab", help="List stored Vocabulary nodes")
     vocab_parser.add_argument("--type", choices=["concept", "method", "domain"], help="Filter vocabulary by type")
     vocab_parser.add_argument("--limit", type=int, default=100, help="Maximum number of vocabulary nodes to return")
@@ -121,6 +125,32 @@ def main() -> None:
                                 "paper": paper_without_embedding(match["paper"]),
                             }
                             for match in matches
+                        ],
+                    },
+                    indent=2,
+                )
+            )
+            return
+
+        if args.command == "edges":
+            try:
+                edges = store.list_similarity_edges(args.paper_id, limit=args.limit)
+            except ValueError as exc:
+                print(json.dumps({"error": str(exc)}, indent=2))
+                return
+            print(
+                json.dumps(
+                    {
+                        "id": args.paper_id,
+                        "edges": [
+                            {
+                                "direction": edge["direction"],
+                                "score": edge["edge"].get("score"),
+                                "created_at": edge["edge"].get("created_at"),
+                                "updated_at": edge["edge"].get("updated_at"),
+                                "paper": paper_without_embedding(edge["paper"]),
+                            }
+                            for edge in edges
                         ],
                     },
                     indent=2,
