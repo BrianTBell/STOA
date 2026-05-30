@@ -22,62 +22,62 @@ End-to-end flow from a new source URL to a queryable node with edges:
 
 ```
 [arXiv URL]
-     │
-     ▼
-[Fetch + parse text]  ──── discard source content (copyright-clean)
-     │
-     ▼
-   ┌─┴────────────────────┬────────────────────┐
-   ▼                      ▼                    ▼
-[Claude extraction]   [Embedding]        [Confidence score]
- concepts, methods,    semantic           AI-estimated
- domain (JSON)         vector             quality signal
-   │                      │                    │
-   ▼                      │                    │
-[Vocab resolution]        │                    │
- reconcile terms          │                    │
- against canonical set    │                    │
-   │                      │                    │
-   └──────────────────────┴────────────────────┘
-                          │
-                          ▼
-                  [Write Neo4j node]
-                   core paper properties (Phase 2)
-                          │
-                          ▼
-                  [Edge generation]
-                   vector index → top-N neighbors
-                   → Claude reasons about pairs
-                   → writes typed edges
-                          │
-                          ▼
-                  [FastAPI → React UI]
-                   layered exploration + AI assistant queries
+     |
+     v
+[Fetch + parse text]  ---- discard source content (copyright-clean)
+     |
+     v
+   +--------------------+--------------------+
+   v                    v                    v
+[Claude extraction] [Embedding]      [Confidence score]
+ concepts, methods, semantic         AI-estimated
+ domain (JSON)     vector            quality signal
+   |                    |                    |
+   v                    |                    |
+[Vocab resolution]      |                    |
+ reconcile terms        |                    |
+ against canonical set  |                    |
+   |                    |                    |
+   +--------------------+--------------------+
+                        |
+                        v
+                [Write Neo4j node]
+                 core paper properties (Phase 2)
+                        |
+                        v
+                [Edge generation]
+                 vector index -> top-N neighbors
+                 -> Claude reasons about pairs
+                 -> writes typed edges
+                        |
+                        v
+                [FastAPI -> React UI]
+                 layered exploration + AI assistant queries
 
 Feedback loops:
-  - Community votes → adjust confidence on existing nodes
-  - Edge generation → queries Neo4j's vector index
+  - Community votes -> adjust confidence on existing nodes
+  - Edge generation -> queries Neo4j's vector index
 ```
 
 ## Component responsibilities
 
-**Ingestion** — `backend/ingest/`. Fetches papers from arXiv by ID, extracts text, normalizes it, hands off to the extraction stage. Owns the discard step.
+**Ingestion** - `backend/ingest/`. Fetches papers from arXiv by ID, extracts text, normalizes it, hands off to the extraction stage. Owns the discard step.
 
-**Extraction** — `backend/extract/`. Sends parsed text to the Claude API with a structured prompt. Returns JSON with `concepts`, `methods`, `domain`, and a short summary. Schema lives in `SCHEMA.md`.
+**Extraction** - `backend/extract/`. Sends parsed text to the Claude API with a structured prompt. Returns JSON with `concepts`, `methods`, `domain`, and a short summary. Schema lives in `SCHEMA.md`.
 
-**Embedding** — `backend/embed/`. Runs `sentence-transformers` locally, returns a dense vector per document. Because the full source text is discarded after extraction, embeddings are generated from the stored paper fields (`title`, `summary`, `concepts`, `methods`, `domain`) rather than the raw document text. Vector dimensionality is set by the model (384 for the default).
+**Embedding** - `backend/embed/`. Runs `sentence-transformers` locally, returns a dense vector per document. Because the full source text is discarded after extraction, embeddings are generated from the stored paper fields (`title`, `summary`, `concepts`, `methods`, `domain`) rather than the raw document text. Vector dimensionality is set by the model (384 for the default).
 
-**Confidence scoring** — `backend/score/`. Lightweight Claude call that returns a 0–1 confidence value with a short rationale. Stored on the node. **Not used as a filter** — purely a surfacing signal.
+**Confidence scoring** - `backend/score/`. Lightweight Claude call that returns a 0-1 confidence value with a short rationale. Stored on the node. **Not used as a filter** - purely a surfacing signal.
 
-**Vocabulary resolution** — `backend/vocab/`. Before writing extracted terms, queries the existing canonical vocabulary in Neo4j. Asks Claude to map new terms to existing canonical ones where appropriate, or propose new terms when nothing fits.
+**Vocabulary resolution** - `backend/vocab/`. Before writing extracted terms, queries the existing canonical vocabulary in Neo4j. Exact canonical terms and known aliases resolve locally first. Only unresolved terms go to Claude, along with the canonical terms from the same attribute type.
 
-**Storage** — `backend/store/`. Wraps the Neo4j driver. Owns Cypher queries, node and edge writes, vector index queries. Phase 3 similarity search uses Neo4j's `SEARCH` clause.
+**Storage** - `backend/store/`. Wraps the Neo4j driver. Owns Cypher queries, node and edge writes, vector index queries. Phase 3 similarity search uses Neo4j's `SEARCH` clause.
 
-**Edge generation** — `backend/edges/`. For a new node, uses Neo4j's vector index to find the top-N most similar existing nodes, then sends paper-pair summaries to Claude to label the relationship (e.g. `extends`, `contradicts`, `applies-to`).
+**Edge generation** - `backend/edges/`. For a new node, uses Neo4j's vector index to find the top-N most similar existing nodes, then sends paper-pair summaries to Claude to label the relationship (e.g. `extends`, `contradicts`, `applies-to`).
 
-**API** — `backend/api/`. FastAPI app exposing endpoints for ingestion triggers, graph queries, and (later) the AI assistant.
+**API** - `backend/api/`. FastAPI app exposing endpoints for ingestion triggers, graph queries, and (later) the AI assistant.
 
-**Frontend** — `frontend/`. React app. Visualization library chosen in Phase 6.
+**Frontend** - `frontend/`. React app. Visualization library chosen in Phase 6.
 
 ### Phase 1 note
 
@@ -103,29 +103,35 @@ Phase 3 extends the storage flow so new ingests compute an embedding before the 
 - `python -m backend.store embed-all`
 - `python -m backend.store similar <paper_id>`
 
+### Phase 4 note
+
+Phase 4 canonicalizes `concepts`, `methods`, and `domain` before writing the paper node. It also adds this CLI entrypoint:
+
+- `python -m backend.store vocab`
+
 ## Repo layout
 
 ```
 /
-├── AGENTS.md
-├── PROJECT.md
-├── ARCHITECTURE.md
-├── SCHEMA.md
-├── ROADMAP.md
-├── README.md
-├── LICENSE
-├── backend/
-│   ├── ingest/
-│   ├── extract/
-│   ├── embed/
-│   ├── score/
-│   ├── vocab/
-│   ├── store/
-│   ├── edges/
-│   ├── api/
-│   └── tests/
-├── frontend/        # deferred to Phase 6
-└── docs/            # diagrams, design notes
+|-- AGENTS.md
+|-- PROJECT.md
+|-- ARCHITECTURE.md
+|-- SCHEMA.md
+|-- ROADMAP.md
+|-- README.md
+|-- LICENSE
+|-- backend/
+|   |-- ingest/
+|   |-- extract/
+|   |-- embed/
+|   |-- vocab/
+|   |-- score/
+|   |-- store/
+|   |-- edges/
+|   |-- api/
+|   `-- tests/
+|-- frontend/        # deferred to Phase 6
+`-- docs/            # diagrams, design notes
 ```
 
 Folder structure should grow as needed, not be created speculatively.

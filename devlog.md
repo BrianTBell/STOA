@@ -103,3 +103,23 @@ upload source paper → extract text → claude extracts fields → sentence-tra
 
 
 -------------------- Phase 4 --------------------
+Phase 4, I'm trying to weed out noise. I'm concerned claude will return a variety of attributes across different papers that are basically
+aliases for the same thing. Why does that matter? Super extreme case, but I think it would be cool if this could grow to capture a ton of data,
+so much that's its basically a web of all human knowledge... sounds familiar. Imagine you grew this data without auditing for similar terms,
+then when you went to filter the graph web by terms you see, RL, Reinforcement Learning, Deep RL, Deep Reinforcement Learning. I'm trying 
+to avoid that mess. 
+
+My phase 4 logic is as follows... ingest paper & get fingerprint → audit attributes against vocab containing emergent aliases → note resuloved
+and unresolved terms (matches and new words respectively)→ for each unresolved term note attribute type (domain,
+method, concept), use this to narrow down relevant vocab to send to claude → send claude the blacklist and the narrowed vocab to compare for new alias,
+or new word → get back claude results → add new vocab node or alias attribute appropriately (neo4j) → alter fingerprint attributes per claude audit →
+send to neo4j as new paper node. 
+
+Having come to a point of completion with the phase I can say it was trickier than others. The majority of the work was optimizing the claude prompt.
+At first claude was quick to mark unresolved words into aliases. Seems like when it was unsure it would lean towards merging into a known words.
+Telling it to add a new word when it was unsure helped a lot. I am working with claude's haiku 4.5 and RL research papers. Maybe the model isn't PHD trained
+in this technical domain. I imagine recognizing like technical terms is harder for haiku 4.5 than first extracting the words mentioned in the paper.
+This is at a point where there are still some weird alias merges, like live control → visual control, but overall this is good. My gut tells me
+not to add to the prompt for the sake of noise, and I might be hitting model limits. I'd be inclined to try on a stronger model later. I recognize
+the data will be a little poisoned moving forward with the current implementation, but I'm willing to work it later. Worst case I have the pleasure
+of doing large DB cleanup later, which could be another good learning opportunity. 

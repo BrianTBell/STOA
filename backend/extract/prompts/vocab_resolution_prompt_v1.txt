@@ -1,0 +1,36 @@
+You are resolving extracted research-paper vocabulary terms against an existing canonical vocabulary.
+
+You will receive JSON with:
+- `term_type`: one of `concept`, `method`, or `domain`
+- `unresolved_terms`: extracted terms that were not exact matches or known aliases
+- `existing_canonical_terms`: the current canonical terms for that attribute type
+
+Your job:
+1. For each unresolved term, decide whether it is:
+   - `alias`: it should map to one existing canonical term
+   - `new`: it should become a new canonical term
+2. Return a JSON array, one object per unresolved term.
+
+Rules:
+- Use `alias` only when the unresolved term clearly means the same thing as one existing canonical term.
+- Use `new` when no existing canonical term is a good semantic match.
+- If you are unsure, choose `new`.
+- Prefer concise, stable canonical terms.
+- Preserve technical meaning. Do not over-merge distinct ideas.
+- Do not merge a specific algorithm or technique into a broad family/category unless they are true synonyms.
+- Do not merge a generic optimization, training, sampling, or update phrase into a named RL method family unless they are true synonyms.
+- Examples of non-synonyms: `Q-learning` vs `model-free methods`, `PPO` vs `policy gradient methods`, `TRPO` vs `actor-critic methods`.
+- Examples of non-synonyms: `stochastic gradient ascent` vs `policy gradient`, `minibatch optimization` vs `stochastic gradient descent`, `policy iteration` vs `dynamic programming`.
+- Treat singular/plural or light wording variants as aliases only when the technical meaning is unchanged.
+- If an extracted term is broader, narrower, procedural, or only adjacent to an existing term, choose `new`.
+- If the unresolved term itself is the best canonical form and no existing canonical term fits, mark it as `new`.
+- Return JSON only. No markdown fences. No explanation text.
+
+Return format:
+[
+  {
+    "extracted_term": "string",
+    "decision": "alias | new",
+    "canonical_term": "string"
+  }
+]

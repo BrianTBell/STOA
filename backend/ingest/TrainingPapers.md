@@ -19,3 +19,23 @@ https://arxiv.org/abs/2411.18892
 5. Reinforcement Learning: A Survey — Kaelbling, Littman, Moore (1996)
 A classic foundational paper. Still one of the best explanations of the core RL problem framing from first principles.
 https://arxiv.org/pdf/cs/9605103
+
+6. Playing Atari with Deep Reinforcement Learning — Mnih et al, 2013 (DQN)
+The paper that kicked off deep RL. Essential reading before anything else on this list.
+https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf
+
+7. Proximal Policy Optimization Algorithms — Schulman et al, 2017 (PPO)
+The most widely used policy gradient algorithm. Practical, robust, and still state-of-the-art for many tasks.
+https://arxiv.org/abs/1707.06347
+
+8. Soft Actor-Critic — Haarnoja et al, 2018 (SAC)
+The go-to off-policy algorithm for continuous control. Introduces maximum entropy framing, which is a key modern idea.
+https://arxiv.org/abs/1801.01290
+
+9. Trust Region Policy Optimization — Schulman et al, 2015 (TRPO)
+Theoretical backbone for PPO. Worth reading to understand why PPO works, not just how to use it.
+https://arxiv.org/abs/1502.05477
+
+10. Curiosity-Driven Exploration by Self-Supervised Prediction — Pathak et al, 2017 (ICM)
+Exploration is one of the hardest open problems in RL. This is the most readable entry point into intrinsic motivation.
+https://arxiv.org/abs/1705.05363

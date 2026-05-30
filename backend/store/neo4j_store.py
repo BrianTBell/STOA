@@ -8,7 +8,7 @@ from .config import Neo4jConfig
 
 
 class Neo4jPaperStore:
-    """Owns the Neo4j driver and Paper-node Cypher for storage and embeddings."""
+    """Owns the Neo4j driver and Paper/Vocabulary Cypher for storage."""
 
     def __init__(self, config: Neo4jConfig) -> None:
         self._driver = GraphDatabase.driver(
@@ -23,13 +23,19 @@ class Neo4jPaperStore:
         self._driver.verify_connectivity()
 
     def ensure_schema(self) -> None:
-        query = """
+        paper_query = """
         CREATE CONSTRAINT paper_id_unique IF NOT EXISTS
         FOR (paper:Paper)
         REQUIRE paper.id IS UNIQUE
         """
+        vocab_query = """
+        CREATE CONSTRAINT vocab_id_unique IF NOT EXISTS
+        FOR (vocab:Vocabulary)
+        REQUIRE vocab.id IS UNIQUE
+        """
         with self._driver.session() as session:
-            session.run(query).consume()
+            session.run(paper_query).consume()
+            session.run(vocab_query).consume()
 
     def ensure_vector_index(self, dimensions: int) -> None:
         query = """
@@ -89,6 +95,58 @@ class Neo4jPaperStore:
         if record is None:
             raise RuntimeError("Neo4j did not return the stored Paper node.")
         return dict(record["paper"])
+
+    def list_vocabulary(self, term_type: str | None = None, limit: int = 5000) -> list[dict[str, Any]]:
+        if term_type:
+            query = """
+            MATCH (vocab:Vocabulary {type: $term_type})
+            RETURN vocab
+            ORDER BY vocab.term ASC
+            LIMIT $limit
+            """
+            params = {"term_type": term_type, "limit": limit}
+        else:
+            query = """
+            MATCH (vocab:Vocabulary)
+            RETURN vocab
+            ORDER BY vocab.type ASC, vocab.term ASC
+            LIMIT $limit
+            """
+            params = {"limit": limit}
+
+        with self._driver.session() as session:
+            result = session.run(query, **params)
+            return [dict(record["vocab"]) for record in result]
+
+    def upsert_vocabulary_entries(self, entries: list[dict[str, Any]]) -> None:
+        if not entries:
+            return
+
+        query = """
+        UNWIND $entries AS entry
+        MERGE (vocab:Vocabulary {id: entry.id})
+        ON CREATE SET
+            vocab.term = entry.term,
+            vocab.type = entry.type,
+            vocab.aliases = entry.aliases,
+            vocab.first_seen = entry.first_seen,
+            vocab.use_count = entry.use_count_increment
+        ON MATCH SET
+            vocab.term = entry.term,
+            vocab.type = entry.type,
+            vocab.first_seen = coalesce(vocab.first_seen, entry.first_seen),
+            vocab.use_count = coalesce(vocab.use_count, 0) + entry.use_count_increment,
+            vocab.aliases = reduce(
+                merged = coalesce(vocab.aliases, []),
+                alias IN entry.aliases |
+                    CASE
+                        WHEN alias IN merged THEN merged
+                        ELSE merged + alias
+                    END
+            )
+        """
+        with self._driver.session() as session:
+            session.run(query, entries=entries).consume()
 
     def list_papers(self, limit: int = 100) -> list[dict[str, Any]]:
         query = """

@@ -20,7 +20,7 @@ def paper_without_embedding(paper: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Storage CLI for Neo4j Paper nodes")
+    parser = argparse.ArgumentParser(description="Storage CLI for Neo4j Paper and Vocabulary nodes")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     list_parser = subparsers.add_parser("list", help="List stored Paper nodes")
@@ -42,6 +42,10 @@ def main() -> None:
     similar_parser = subparsers.add_parser("similar", help="Find nearest neighbors for one Paper node")
     similar_parser.add_argument("paper_id", help="Paper node id, e.g. arxiv:2301.04567")
     similar_parser.add_argument("--limit", type=int, default=5, help="Maximum number of similar papers to return")
+
+    vocab_parser = subparsers.add_parser("vocab", help="List stored Vocabulary nodes")
+    vocab_parser.add_argument("--type", choices=["concept", "method", "domain"], help="Filter vocabulary by type")
+    vocab_parser.add_argument("--limit", type=int, default=100, help="Maximum number of vocabulary nodes to return")
 
     args = parser.parse_args()
 
@@ -86,6 +90,11 @@ def main() -> None:
                     indent=2,
                 )
             )
+            return
+
+        if args.command == "vocab":
+            vocab_entries = store.list_vocabulary(term_type=args.type, limit=args.limit)
+            print(json.dumps(vocab_entries, indent=2))
             return
 
         paper = store.get_paper(args.paper_id)

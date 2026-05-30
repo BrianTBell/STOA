@@ -26,6 +26,7 @@ from PyPDF2 import PdfReader
 
 from backend.embed import build_embedding_input, embed_text
 from backend.store import Neo4jPaperStore, load_neo4j_config
+from backend.vocab import resolve_paper_vocabulary
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = ROOT / "backend" / "extract" / "prompts"
@@ -264,6 +265,10 @@ def parse_json_response(text: str) -> dict:
         ) from exc
 
 
+def query_claude_json(prompt: str, api_key: str, api_base: str, model: str = CLAUDE_MODEL) -> dict:
+    return parse_json_response(query_claude(prompt, api_key, api_base, model=model))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Phase 1 ingestion: fetch paper text and call Claude for structured extraction")
     parser.add_argument("arxiv_id", nargs="?", help="The arXiv ID, e.g. 2301.04567")
@@ -365,14 +370,29 @@ def main() -> None:
         print(json.dumps(extracted_json, indent=2))
         return
 
-    print("Generating embedding from stored paper fields...")
-    paper_record["embedding"] = embed_text(build_embedding_input(paper_record))
-
     try:
         store = Neo4jPaperStore(load_neo4j_config())
         try:
             store.verify_connectivity()
             store.ensure_schema()
+            vocabulary_by_type = {
+                "concept": store.list_vocabulary(term_type="concept"),
+                "method": store.list_vocabulary(term_type="method"),
+                "domain": store.list_vocabulary(term_type="domain"),
+            }
+
+            print("Resolving extracted vocabulary against the canonical store...")
+            resolution_result = resolve_paper_vocabulary(
+                paper_record,
+                vocabulary_by_type=vocabulary_by_type,
+                claude_query=lambda prompt: query_claude_json(prompt, api_key, api_base, model=args.model),
+            )
+            paper_record = resolution_result.resolved_paper
+            if resolution_result.resolution_log["vocab_updates"]:
+                store.upsert_vocabulary_entries(resolution_result.resolution_log["vocab_updates"])
+
+            print("Generating embedding from canonicalized paper fields...")
+            paper_record["embedding"] = embed_text(build_embedding_input(paper_record))
             store.ensure_vector_index(len(paper_record["embedding"]))
             stored_paper = store.upsert_paper(paper_record)
         finally:
@@ -382,7 +402,15 @@ def main() -> None:
         print("Structured extraction succeeded, but no data has been written.")
         return
 
-    print(json.dumps(stored_paper, indent=2))
+    print(
+        json.dumps(
+            {
+                "paper": stored_paper,
+                "vocabulary_resolution": resolution_result.resolution_log,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
