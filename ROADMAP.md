@@ -74,9 +74,12 @@ This phase intentionally comes after edges because the core graph structure matt
 **Goal:** A FastAPI server exposes the graph.
 
 **Done when:**
-- Endpoints exist for: ingest a paper by arXiv ID, list nodes, get a node by ID, get edges for a node, find similar to a node
+- Endpoints exist for: ingest a local PDF, ingest a paper by arXiv ID, list nodes, get a node by ID, get edges for a node, find similar to a node
+- Local PDF ingestion is the primary API path and arXiv ingestion remains available as a secondary convenience
+- The CLI and API call the same reusable ingestion pipeline
 - OpenAPI docs render at `/docs`
 - The owner can hit each endpoint from the browser or curl and get sensible JSON
+- Automated tests cover the API contract without calling Claude or Neo4j
 
 ## Phase 8 - Frontend (basic)
 

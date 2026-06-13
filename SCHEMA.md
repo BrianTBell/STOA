@@ -36,7 +36,7 @@ Phase 2 stores the core bibliographic and extraction fields first. Later phases 
 
 Later phases add `embedding` as an additional property on the same `Paper` node.
 
-For local PDFs, `id` uses the `localpdf:` prefix with a stable hash of the file bytes, and `source_url` is stored as a `file:///...` URI pointing at the local document.
+For local PDFs, `id` uses the `localpdf:` prefix with a stable hash of the file bytes. CLI ingestion stores a `file:///...` URI pointing at the local document. API uploads use a caller-supplied original URL when available; otherwise they store a stable `localpdf://<hash>/<filename>` source identifier because browsers do not expose the original local path.
 
 ### Vocabulary node
 

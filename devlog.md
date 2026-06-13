@@ -197,4 +197,18 @@ One step closer to a GUI to play with.
 
 
 -------------------- Phase 7 --------------------
-Coming Soon...
+Phase 7 was pretty simple. API was implemented to mirror CLI commands. For example: python -m backend.ingest --pdf paper.pdf --store -> POST /ingest/pdf. The pipeline didn't change. Just a FastAPI wrapper around the backend logic so future frontend can call it.
+
+I learned more about the frontend to backend pipeline with regard to uvicorn / fastapi. I think the basic idea is...
+1. Uvicorn has a local server running, listening for raw HTTP data.
+2. Uvicorn hears data and converts it to an ASGI call. 
+* An ASGI call is a protocol web apps use to communicate with python, its made up of three args:
+- Scope: This is metadata like the url, method, header, etc
+- Receive: This is an async function that allows fastapi to pull more information from the server beyond the scope, like PDF bytes
+- Send: This is an async function that allows FastAPI to return data from the backend to uvicorn.
+3. FastAPI hears that ASGI call, goes off and does the backend pipeline, and returns relevant data through send. 
+4. Uvicorn converts that to http data to return to the frontend.
+
+
+
+-------------------- Phase 8 --------------------

@@ -8,6 +8,7 @@ This document captures the stack and the pipeline. Update it whenever a meaningf
 |-------|--------|-----|
 | Language (backend) | Python 3.11+ | Owner's strongest language; best ecosystem for ML/LLM work |
 | Web framework | FastAPI | Modern, async, automatic OpenAPI docs, minimal boilerplate |
+| API server | Uvicorn | Small ASGI server used to run FastAPI locally |
 | Graph database | Neo4j (AuraDB Free or local instance) | Built for graphs; native Cypher; has a vector index for embedding similarity |
 | Embedding model | `sentence-transformers` (default: `all-MiniLM-L6-v2`) | Local, free, fast, runs on CPU, good enough for prototype |
 | LLM | Claude API (Haiku 4.5 default; Sonnet via `--model`) | Haiku handles structured JSON extraction at ~3-4x lower cost; Sonnet remains available for comparison or complex cases |
@@ -63,7 +64,7 @@ Feedback loops:
 
 ## Component responsibilities
 
-**Ingestion** - `backend/ingest/`. Fetches papers from arXiv by ID, extracts text, normalizes it, hands off to the extraction stage. Owns the discard step.
+**Ingestion** - `backend/ingest/`. Accepts local PDF bytes as the primary path or fetches a paper from arXiv by ID, extracts and normalizes the text, then hands it to the extraction stage. Owns the discard step. The reusable pipeline lives outside the CLI entrypoint so the CLI and API execute the same implementation.
 
 **Extraction** - `backend/extract/`. Sends parsed text to the Claude API with a structured prompt. Returns JSON with `concepts`, `methods`, `domain`, and a short summary. Schema lives in `SCHEMA.md`.
 
@@ -121,6 +122,18 @@ Phase 5 extends the store path so each newly written paper regenerates its outgo
 
 Phase 6 inserts a lightweight intake screen between text extraction and attribute extraction. Obvious junk, spam, malformed OCR sludge, or non-paper uploads stop there with a short rationale instead of consuming more Claude calls and graph writes.
 
+### Phase 7 note
+
+Phase 7 exposes the existing pipeline through FastAPI without duplicating ingestion or storage logic. The API supports:
+
+- raw local PDF upload with `POST /ingest/pdf?filename=<name>` and an `application/pdf` body
+- secondary arXiv ingestion with `POST /ingest/arxiv`
+- paper listing, lookup, similarity queries, and edge inspection under `/papers`
+
+PDF upload intentionally uses a raw request body instead of multipart form data. This keeps the direct Phase 7 dependencies to `fastapi` and `uvicorn`; no multipart parsing library is required. An uploaded PDF may include an optional `source_url`. When omitted, the pipeline stores a stable `localpdf://` source identifier derived from the document hash and filename.
+
+The API creates one shared Neo4j driver when the server starts and closes it when the server stops. Ingestion remains synchronous: the request returns after screening, extraction, vocabulary resolution, embedding, storage, and edge generation have completed.
+
 ## Repo layout
 
 ```
@@ -142,7 +155,7 @@ Phase 6 inserts a lightweight intake screen between text extraction and attribut
 |   |-- edges/
 |   |-- api/
 |   `-- tests/
-|-- frontend/        # deferred to Phase 6
+|-- frontend/        # deferred to Phase 8
 `-- docs/            # diagrams, design notes
 ```
 

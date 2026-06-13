@@ -30,7 +30,7 @@ A **living ontology** — a graph that grows continuously as content is ingested
 
 The prototype is intentionally narrow:
 
-- **Text sources only** — starting with arXiv papers
+- **Text sources only** — local PDF upload is primary; arXiv ingestion is a secondary convenience
 - **One domain** to seed the graph (chosen by the owner during Phase 1)
 - **Single user** — the owner is the only "community" while the graph is small
 - **Local infrastructure** — Neo4j local, Python backend, simple frontend
