@@ -8,16 +8,22 @@ from typing import Protocol
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, status
 
-from backend.ingest import IngestionError, IntakeRejectedError, load_claude_config
+from backend.ingest import (
+    IngestionError,
+    IntakeRejectedError,
+    PaperReadError,
+    load_claude_config,
+)
 
 from .models import (
     ArxivIngestRequest,
+    GraphResponse,
     IngestionResponse,
     PaperEdgesResponse,
     PaperResponse,
     SimilarityResponse,
 )
-from .service import StoaService
+from .service import DuplicatePaperError, StoaService
 
 
 class ApiService(Protocol):
@@ -33,6 +39,8 @@ class ApiService(Protocol):
     def list_papers(self, limit: int) -> list[dict]: ...
 
     def get_paper(self, paper_id: str) -> dict | None: ...
+
+    def get_graph(self, limit: int) -> dict: ...
 
     def get_similarity(self, paper_id: str, limit: int) -> dict: ...
 
@@ -74,18 +82,39 @@ def create_app(service: ApiService | None = None) -> FastAPI:
         return request.app.state.service
 
     def raise_ingestion_http_error(exc: Exception) -> None:
+        if isinstance(exc, DuplicatePaperError):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "duplicate_paper",
+                    "message": str(exc),
+                    "paper": exc.paper,
+                },
+            ) from exc
         if isinstance(exc, IntakeRejectedError):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
-                    "decision": exc.result.decision,
+                    "code": "not_academic_paper",
+                    "message": "This upload was not accepted as an academic paper.",
                     "rationale": exc.result.rationale,
+                },
+            ) from exc
+        if isinstance(exc, PaperReadError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "cannot_read_paper",
+                    "message": str(exc),
                 },
             ) from exc
         if isinstance(exc, IngestionError):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
+                detail={
+                    "code": "ingestion_failed",
+                    "message": str(exc),
+                },
             ) from exc
         raise exc
 
@@ -129,6 +158,17 @@ def create_app(service: ApiService | None = None) -> FastAPI:
         limit: int = Query(25, ge=1, le=1000),
     ) -> list[dict]:
         return get_service(request).list_papers(limit)
+
+    @application.get(
+        "/graph",
+        response_model=GraphResponse,
+        summary="Get papers and similarity edges for graph visualization",
+    )
+    def get_graph(
+        request: Request,
+        limit: int = Query(1000, ge=1, le=5000),
+    ) -> dict:
+        return get_service(request).get_graph(limit)
 
     @application.get(
         "/papers/{paper_id:path}/edges",

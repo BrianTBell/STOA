@@ -11,3 +11,7 @@ venv/
 .idea/
 .vscode/
 .DS_Store
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+backend/dev/.runtime/

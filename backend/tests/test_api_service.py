@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from backend.api.service import StoaService
+from backend.api.service import DuplicatePaperError, StoaService
 from backend.ingest.pipeline import ClaudeConfig, IngestionResult, PreparedPaper
 from backend.screen import IntakeScreenResult
 
@@ -32,6 +32,23 @@ class FakeStore:
     def get_paper(self, paper_id: str) -> dict | None:
         return sample_paper() if paper_id == "localpdf:abc123" else None
 
+    def get_graph(self, limit: int) -> dict:
+        paper = sample_paper()
+        neighbor = {**sample_paper(), "id": "localpdf:neighbor"}
+        return {
+            "papers": [paper, neighbor][:limit],
+            "edges": [
+                {
+                    "source_id": paper["id"],
+                    "target_id": neighbor["id"],
+                    "score": 0.91,
+                    "nominated_by": [paper["id"]],
+                    "created_at": "2026-06-13T12:00:00+00:00",
+                    "updated_at": "2026-06-13T12:00:00+00:00",
+                }
+            ],
+        }
+
 
 class ApiServiceTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -49,6 +66,27 @@ class ApiServiceTests(unittest.TestCase):
         self.assertNotIn("embedding", papers[0])
         self.assertIsNotNone(paper)
         self.assertNotIn("embedding", paper)
+
+    def test_graph_edges_expose_nominators(self) -> None:
+        graph = self.service.get_graph(limit=10)
+
+        self.assertEqual(
+            graph["edges"][0]["nominated_by"],
+            ["localpdf:abc123"],
+        )
+        self.assertNotIn("embedding", graph["papers"][0])
+
+    @patch("backend.api.service.prepare_pdf_bytes")
+    @patch("backend.api.service.build_local_pdf_id", return_value="localpdf:abc123")
+    def test_duplicate_pdf_stops_before_preparation(
+        self,
+        _build_local_pdf_id_mock,
+        prepare_pdf_bytes_mock,
+    ) -> None:
+        with self.assertRaises(DuplicatePaperError):
+            self.service.ingest_pdf(b"%PDF-test", "paper.pdf")
+
+        prepare_pdf_bytes_mock.assert_not_called()
 
     @patch("backend.api.service.ingest_prepared_paper")
     @patch("backend.api.service.prepare_pdf_bytes")

@@ -6,6 +6,7 @@ from typing import Any
 from neo4j import GraphDatabase
 
 from .config import Neo4jConfig
+from .neighbor_policy import select_top_neighbors
 
 
 class Neo4jPaperStore:
@@ -166,6 +167,39 @@ class Neo4jPaperStore:
             result = session.run(query, limit=limit)
             return [dict(record["paper"]) for record in result]
 
+    def get_graph(self, limit: int = 1000) -> dict[str, list[dict[str, Any]]]:
+        papers = self.list_papers(limit=limit)
+        paper_ids = [paper["id"] for paper in papers]
+        if not paper_ids:
+            return {"papers": [], "edges": []}
+
+        query = """
+        MATCH (source:Paper)-[edge:SIMILAR_TO]->(target:Paper)
+        WHERE source.id IN $paper_ids AND target.id IN $paper_ids
+        RETURN
+            source.id AS source_id,
+            target.id AS target_id,
+            edge.score AS score,
+            coalesce(edge.nominated_by, []) AS nominated_by,
+            edge.created_at AS created_at,
+            edge.updated_at AS updated_at
+        ORDER BY score DESC, source_id ASC, target_id ASC
+        """
+        with self._driver.session() as session:
+            result = session.run(query, paper_ids=paper_ids)
+            edges = [
+                {
+                    "source_id": record["source_id"],
+                    "target_id": record["target_id"],
+                    "score": float(record["score"]),
+                    "nominated_by": list(record["nominated_by"]),
+                    "created_at": record["created_at"],
+                    "updated_at": record["updated_at"],
+                }
+                for record in result
+            ]
+        return {"papers": papers, "edges": edges}
+
     def get_paper(self, paper_id: str) -> dict[str, Any] | None:
         query = """
         MATCH (paper:Paper {id: $paper_id})
@@ -243,106 +277,255 @@ class Neo4jPaperStore:
         self,
         paper_id: str,
         limit: int = 3,
-        min_score: float = 0.80,
+        min_score: float = 0.65,
     ) -> list[dict[str, Any]]:
-        matches = [
-            match
-            for match in self.find_similar_papers(paper_id, limit=limit)
-            if match["score"] >= min_score
-        ]
-        timestamp = self._now_iso()
-        upsert_query = """
-        UNWIND $matches AS match
-        MATCH (source:Paper {id: match.source_id})
-        MATCH (target:Paper {id: match.target_id})
-        MERGE (source)-[edge:SIMILAR_TO]->(target)
-        ON CREATE SET edge.created_at = $timestamp
-        SET
-            edge.score = CASE
-                WHEN edge.score IS NULL OR match.score > edge.score THEN match.score
-                ELSE edge.score
-            END,
-            edge.updated_at = $timestamp
-        RETURN source.id AS source_id, target.id AS target_id, edge.score AS score, edge.created_at AS created_at, edge.updated_at AS updated_at
-        ORDER BY score DESC
+        if self._has_legacy_similarity_edges():
+            self.rebuild_similarity_edges(limit=limit, min_score=min_score)
+            return self._formatted_incident_edges(paper_id)
+
+        scores = self._exact_similarity_scores(paper_id, min_score)
+        new_nominations = select_top_neighbors(scores, limit, min_score)
+
+        candidate_ids = [score["paper_id"] for score in scores]
+        current_by_paper = self._list_nominations(candidate_ids)
+        updates = [{"paper_id": paper_id, "neighbors": new_nominations}]
+
+        for score in scores:
+            candidate_id = score["paper_id"]
+            current = current_by_paper.get(candidate_id, [])
+            desired = select_top_neighbors(
+                [*current, {"paper_id": paper_id, "score": score["score"]}],
+                limit,
+                min_score,
+            )
+            if desired != current:
+                updates.append({"paper_id": candidate_id, "neighbors": desired})
+
+        self._sync_nominations(updates)
+        return self._formatted_incident_edges(paper_id)
+
+    def _has_legacy_similarity_edges(self) -> bool:
+        query = """
+        MATCH ()-[edge:SIMILAR_TO]->()
+        WHERE edge.nominated_by IS NULL
+        RETURN count(edge) > 0 AS has_legacy_edges
         """
-
-        canonical_matches = []
-        for match in matches:
-            source_id, target_id = self._canonical_pair(paper_id, match["paper"]["id"])
-            canonical_matches.append(
-                {
-                    "source_id": source_id,
-                    "target_id": target_id,
-                    "score": match["score"],
-                }
-            )
-
         with self._driver.session() as session:
-            result = session.run(
-                upsert_query,
-                timestamp=timestamp,
-                matches=canonical_matches,
-            )
-            written_edges = [
-                {
-                    "paper_id": record["target_id"] if record["source_id"] == paper_id else record["source_id"],
-                    "score": float(record["score"]),
-                    "created_at": record["created_at"],
-                    "updated_at": record["updated_at"],
-                }
+            record = session.run(query).single()
+        return bool(record["has_legacy_edges"]) if record is not None else False
+
+    def _exact_similarity_scores(
+        self,
+        paper_id: str,
+        min_score: float,
+    ) -> list[dict[str, Any]]:
+        query = """
+        MATCH (paper:Paper {id: $paper_id})
+        MATCH (candidate:Paper)
+        WHERE
+            candidate.id <> paper.id
+            AND paper.embedding IS NOT NULL
+            AND candidate.embedding IS NOT NULL
+        WITH
+            candidate.id AS paper_id,
+            vector.similarity.cosine(paper.embedding, candidate.embedding) AS score
+        WHERE score >= $min_score
+        RETURN paper_id, score
+        ORDER BY score DESC, paper_id ASC
+        """
+        with self._driver.session() as session:
+            result = session.run(query, paper_id=paper_id, min_score=min_score)
+            return [
+                {"paper_id": record["paper_id"], "score": float(record["score"])}
                 for record in result
             ]
-        self.normalize_all_similarity_edges()
-        return written_edges
 
-    def normalize_all_similarity_edges(self) -> None:
+    def _list_nominations(
+        self,
+        paper_ids: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        nominations = {paper_id: [] for paper_id in paper_ids}
+        if not paper_ids:
+            return nominations
+
         query = """
-        MATCH (left:Paper)-[edge:SIMILAR_TO]->(right:Paper)
-        RETURN left.id AS left_id, right.id AS right_id, edge.score AS score, edge.created_at AS created_at
+        MATCH (paper:Paper)-[edge:SIMILAR_TO]-(neighbor:Paper)
+        WHERE
+            paper.id IN $paper_ids
+            AND paper.id IN coalesce(edge.nominated_by, [])
+        RETURN paper.id AS paper_id, neighbor.id AS neighbor_id, edge.score AS score
+        ORDER BY paper_id ASC, score DESC, neighbor_id ASC
         """
-        rows: list[dict[str, Any]] = []
         with self._driver.session() as session:
-            result = session.run(query)
-            rows = [dict(record) for record in result]
+            result = session.run(query, paper_ids=paper_ids)
+            for record in result:
+                nominations[record["paper_id"]].append(
+                    {
+                        "paper_id": record["neighbor_id"],
+                        "score": float(record["score"]),
+                    }
+                )
+        return nominations
 
-        grouped: dict[tuple[str, str], dict[str, Any]] = {}
-        for row in rows:
-            source_id, target_id = self._canonical_pair(row["left_id"], row["right_id"])
-            group = grouped.setdefault(
-                (source_id, target_id),
-                {
-                    "source_id": source_id,
-                    "target_id": target_id,
-                    "score": float(row["score"]) if row["score"] is not None else 0.0,
-                    "created_at": row["created_at"] or self._now_iso(),
-                },
-            )
-            if row["score"] is not None:
-                group["score"] = max(group["score"], float(row["score"]))
-            created_at = row["created_at"]
-            if created_at and created_at < group["created_at"]:
-                group["created_at"] = created_at
-
-        if not rows:
+    def _sync_nominations(
+        self,
+        updates: list[dict[str, Any]],
+        replace_all: bool = False,
+    ) -> None:
+        if not updates and not replace_all:
             return
 
         timestamp = self._now_iso()
-        delete_query = "MATCH ()-[edge:SIMILAR_TO]->() DELETE edge"
-        create_query = """
-        UNWIND $pairs AS pair
-        MATCH (source:Paper {id: pair.source_id})
-        MATCH (target:Paper {id: pair.target_id})
-        MERGE (source)-[edge:SIMILAR_TO]->(target)
+        remove_query = """
+        MATCH (paper:Paper {id: $paper_id})-[edge:SIMILAR_TO]-(neighbor:Paper)
+        WHERE $paper_id IN coalesce(edge.nominated_by, [])
         SET
-            edge.score = pair.score,
-            edge.created_at = pair.created_at,
+            edge.nominated_by = [
+                nominator IN edge.nominated_by
+                WHERE nominator <> $paper_id
+            ],
+            edge.updated_at = $timestamp
+        WITH edge
+        WHERE size(edge.nominated_by) = 0
+        DELETE edge
+        """
+        upsert_query = """
+        UNWIND $neighbors AS neighbor
+        MATCH (source:Paper {id: neighbor.source_id})
+        MATCH (target:Paper {id: neighbor.target_id})
+        MERGE (source)-[edge:SIMILAR_TO]->(target)
+        ON CREATE SET
+            edge.created_at = $timestamp,
+            edge.nominated_by = []
+        SET
+            edge.score = neighbor.score,
+            edge.nominated_by = CASE
+                WHEN $paper_id IN coalesce(edge.nominated_by, [])
+                THEN edge.nominated_by
+                ELSE coalesce(edge.nominated_by, []) + $paper_id
+            END,
             edge.updated_at = $timestamp
         """
-        pairs = list(grouped.values())
+
+        def write_updates(transaction: Any) -> None:
+            if replace_all:
+                transaction.run(
+                    "MATCH ()-[edge:SIMILAR_TO]->() DELETE edge"
+                ).consume()
+            for update in updates:
+                paper_id = update["paper_id"]
+                transaction.run(
+                    remove_query,
+                    paper_id=paper_id,
+                    timestamp=timestamp,
+                ).consume()
+                neighbors = []
+                for neighbor in update["neighbors"]:
+                    source_id, target_id = self._canonical_pair(
+                        paper_id,
+                        neighbor["paper_id"],
+                    )
+                    neighbors.append(
+                        {
+                            "source_id": source_id,
+                            "target_id": target_id,
+                            "score": neighbor["score"],
+                        }
+                    )
+                transaction.run(
+                    upsert_query,
+                    paper_id=paper_id,
+                    neighbors=neighbors,
+                    timestamp=timestamp,
+                ).consume()
+
         with self._driver.session() as session:
-            session.run(delete_query).consume()
-            session.run(create_query, pairs=pairs, timestamp=timestamp).consume()
+            session.execute_write(write_updates)
+
+    def _formatted_incident_edges(self, paper_id: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "paper_id": edge["paper"]["id"],
+                "score": float(edge["edge"]["score"]),
+                "created_at": edge["edge"].get("created_at"),
+                "updated_at": edge["edge"].get("updated_at"),
+            }
+            for edge in self.list_similarity_edges(paper_id, limit=10000)
+        ]
+
+    def rebuild_similarity_edges(
+        self,
+        limit: int = 3,
+        min_score: float = 0.65,
+    ) -> dict[str, int | bool]:
+        paper_ids_query = """
+        MATCH (paper:Paper)
+        WHERE paper.embedding IS NOT NULL
+        RETURN paper.id AS paper_id
+        ORDER BY paper_id ASC
+        """
+        with self._driver.session() as session:
+            paper_ids = [
+                record["paper_id"]
+                for record in session.run(paper_ids_query)
+            ]
+
+        updates = []
+        for paper_id in paper_ids:
+            scores = self._exact_similarity_scores(paper_id, min_score)
+            updates.append(
+                {
+                    "paper_id": paper_id,
+                    "neighbors": select_top_neighbors(scores, limit, min_score),
+                }
+            )
+
+        self._sync_nominations(updates, replace_all=True)
+
+        nomination_query = """
+        MATCH (paper:Paper)
+        WHERE paper.embedding IS NOT NULL
+        OPTIONAL MATCH (paper)-[edge:SIMILAR_TO]-()
+        WHERE paper.id IN coalesce(edge.nominated_by, [])
+        WITH paper, count(edge) AS nomination_count
+        RETURN
+            coalesce(sum(nomination_count), 0) AS nominations,
+            coalesce(max(nomination_count), 0) AS max_nominations
+        """
+        edge_query = """
+        MATCH ()-[edge:SIMILAR_TO]->()
+        RETURN count(edge) AS edges
+        """
+        invalid_nominator_query = """
+        MATCH (source:Paper)-[edge:SIMILAR_TO]->(target:Paper)
+        UNWIND coalesce(edge.nominated_by, []) AS nominator
+        WITH source, target, nominator
+        WHERE nominator <> source.id AND nominator <> target.id
+        RETURN count(nominator) AS invalid_nominators
+        """
+        with self._driver.session() as session:
+            nomination_record = session.run(nomination_query).single()
+            edge_record = session.run(edge_query).single()
+            invalid_record = session.run(invalid_nominator_query).single()
+        return {
+            "papers": len(paper_ids),
+            "edges": int(edge_record["edges"]) if edge_record is not None else 0,
+            "nominations": (
+                int(nomination_record["nominations"])
+                if nomination_record is not None
+                else 0
+            ),
+            "max_nominations": (
+                int(nomination_record["max_nominations"])
+                if nomination_record is not None
+                else 0
+            ),
+            "nominators_valid": (
+                int(invalid_record["invalid_nominators"]) == 0
+                if invalid_record is not None
+                else True
+            ),
+        }
 
     def list_similarity_edges(
         self,
@@ -377,6 +560,13 @@ class Neo4jPaperStore:
             ]
 
     def delete_paper(self, paper_id: str) -> bool:
+        affected_query = """
+        MATCH (paper:Paper {id: $paper_id})-[edge:SIMILAR_TO]-()
+        UNWIND coalesce(edge.nominated_by, []) AS nominator
+        WITH DISTINCT nominator
+        WHERE nominator <> $paper_id
+        RETURN nominator
+        """
         query = """
         MATCH (paper:Paper {id: $paper_id})
         WITH paper, count(paper) AS matches
@@ -384,7 +574,25 @@ class Neo4jPaperStore:
         RETURN matches > 0 AS deleted
         """
         with self._driver.session() as session:
+            affected_paper_ids = [
+                record["nominator"]
+                for record in session.run(affected_query, paper_id=paper_id)
+            ]
             record = session.run(query, paper_id=paper_id).single()
         if record is None:
             return False
-        return bool(record["deleted"])
+        deleted = bool(record["deleted"])
+        if deleted and affected_paper_ids:
+            updates = [
+                {
+                    "paper_id": affected_id,
+                    "neighbors": select_top_neighbors(
+                        self._exact_similarity_scores(affected_id, 0.65),
+                        limit=3,
+                        min_score=0.65,
+                    ),
+                }
+                for affected_id in affected_paper_ids
+            ]
+            self._sync_nominations(updates)
+        return deleted

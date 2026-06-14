@@ -36,7 +36,7 @@ MAX_PROMPT_TEXT_CHARS = 11000
 MAX_RESPONSE_TOKENS = 1200
 ARXIV_MIN_RETRY_SECONDS = 3
 DEFAULT_SIMILAR_EDGE_NEIGHBORS = 3
-DEFAULT_SIMILAR_EDGE_MIN_SCORE = 0.80
+DEFAULT_SIMILAR_EDGE_MIN_SCORE = 0.65
 ARXIV_HEADERS = {
     "User-Agent": "STOA/0.1 (mailto:briantbell.work@gmail.com)",
 }
@@ -44,6 +44,10 @@ ARXIV_HEADERS = {
 
 class IngestionError(RuntimeError):
     """Raised when an ingestion cannot complete."""
+
+
+class PaperReadError(IngestionError):
+    """Raised when a paper's text cannot be read."""
 
 
 class IntakeRejectedError(IngestionError):
@@ -168,7 +172,7 @@ def extract_text_from_pdf(path: Path) -> str:
                 texts.append(text)
         return "\n\n".join(texts)
     except Exception as exc:
-        raise IngestionError(f"PDF text extraction failed: {exc}") from exc
+        raise PaperReadError(f"PDF text extraction failed: {exc}") from exc
 
 
 def load_prompt(prompt_path: Path) -> str:
@@ -282,7 +286,7 @@ def prepare_pdf_bytes(
     source_url: str | None = None,
 ) -> PreparedPaper:
     if not pdf_bytes:
-        raise IngestionError("The PDF upload is empty.")
+        raise PaperReadError("The PDF upload is empty.")
     safe_filename = Path(filename).name.strip()
     if not safe_filename:
         raise IngestionError("A PDF filename is required.")
@@ -298,7 +302,7 @@ def prepare_pdf_bytes(
         temporary_path.unlink(missing_ok=True)
 
     if not extracted_text.strip():
-        raise IngestionError(
+        raise PaperReadError(
             "Could not extract text from the PDF. It may be scanned, unreadable, or corrupted."
         )
 
@@ -353,7 +357,7 @@ def prepare_arxiv(arxiv_id: str) -> PreparedPaper:
         extracted_text = extract_text_from_pdf(pdf_path)
 
     if not extracted_text.strip():
-        raise IngestionError("Could not extract text from the arXiv PDF.")
+        raise PaperReadError("Could not extract text from the arXiv PDF.")
 
     source_url = f"https://arxiv.org/abs/{cleaned_id}"
     full_text = truncate_text_for_prompt(extracted_text)

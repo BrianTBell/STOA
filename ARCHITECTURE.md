@@ -12,7 +12,8 @@ This document captures the stack and the pipeline. Update it whenever a meaningf
 | Graph database | Neo4j (AuraDB Free or local instance) | Built for graphs; native Cypher; has a vector index for embedding similarity |
 | Embedding model | `sentence-transformers` (default: `all-MiniLM-L6-v2`) | Local, free, fast, runs on CPU, good enough for prototype |
 | LLM | Claude API (Haiku 4.5 default; Sonnet via `--model`) | Haiku handles structured JSON extraction at ~3-4x lower cost; Sonnet remains available for comparison or complex cases |
-| Frontend | React + a graph viz library | Best ecosystem for graph UIs; library choice deferred to Phase 8 |
+| Frontend | React 19 + TypeScript + Vite | Small modern frontend stack with fast local development and a production build |
+| Graph visualization | Sigma.js + Graphology | WebGL rendering for an explorable graph, with graph data and rendering kept separate |
 | Source API | arXiv API | Free, well-documented, full-text accessible |
 
 Phase 2 storage is designed to work against any Neo4j instance reachable through `.env` settings. AuraDB Free is the default hosted path for this repo because it avoids local infrastructure friction while keeping the same driver and Cypher model we would use later in a deployed prototype.
@@ -76,11 +77,15 @@ Feedback loops:
 
 **Storage** - `backend/store/`. Wraps the Neo4j driver. Owns Cypher queries, node and edge writes, vector index queries. Phase 3 similarity search uses Neo4j's `SEARCH` clause.
 
-**Edge generation** - `backend/edges/`. For a new node, uses Neo4j's vector index to find the top-N most similar existing nodes, then writes `SIMILAR_TO` edges with the returned similarity scores when they clear a minimum score threshold. This phase intentionally avoids a second Claude comparison pass because the structured paper footprint is not rich enough to justify fine-grained relationship claims at acceptable token cost.
+**Edge generation** - `backend/store/`. Each paper independently nominates its exact top-N cosine-similarity neighbors above the minimum threshold. When a paper is added, it is compared with every existing embedding once; only papers whose top-N set changes are rewritten. A canonical `SIMILAR_TO` edge remains visible when either endpoint nominates the other, so similarity does not need to be mutual. This avoids a second Claude comparison pass because the structured paper footprint is not rich enough to justify fine-grained relationship claims at acceptable token cost.
+
+The current minimum similarity score is `0.65`. Combined with the top-three cap, this gives papers in sparse topic regions provisional useful connections while allowing stronger neighbors to displace weaker ones as the graph grows.
 
 **API** - `backend/api/`. FastAPI app exposing endpoints for ingestion triggers, graph queries, and (later) the AI assistant.
 
-**Frontend** - `frontend/`. React app. Visualization library chosen in Phase 8.
+**Frontend** - `frontend/`. React app built with Vite and TypeScript. Sigma.js renders the graph while Graphology owns the browser-side graph model.
+
+**Local development controls** - `backend/dev/`. A standard-library Python command starts, restarts, and stops the API and Vite process together. It records only the child process IDs and local logs, adding no process-manager dependency.
 
 ### Phase 1 note
 
@@ -114,9 +119,10 @@ Phase 4 canonicalizes `concepts`, `methods`, and `domain` before writing the pap
 
 ### Phase 5 note
 
-Phase 5 extends the store path so each newly written paper regenerates its outgoing `SIMILAR_TO` edges from top-N vector neighbors. It also adds this CLI entrypoint:
+Phase 5 extends the store path so each newly written paper updates the affected exact top-N similarity neighborhoods. It also adds these CLI entrypoints:
 
 - `python -m backend.store edges <paper_id>`
+- `python -m backend.store rebuild-edges`
 
 ### Phase 6 note
 
@@ -132,7 +138,29 @@ Phase 7 exposes the existing pipeline through FastAPI without duplicating ingest
 
 PDF upload intentionally uses a raw request body instead of multipart form data. This keeps the direct Phase 7 dependencies to `fastapi` and `uvicorn`; no multipart parsing library is required. An uploaded PDF may include an optional `source_url`. When omitted, the pipeline stores a stable `localpdf://` source identifier derived from the document hash and filename.
 
+Ingestion performs an identity check before expensive processing. Local PDFs use the existing content hash ID, so uploading the same file under another filename is still detected; arXiv papers use their normalized arXiv ID. Duplicate requests return the existing paper with HTTP `409` and do not call Claude or recompute embeddings. Read failures and intake rejections use separate structured error codes so clients can explain the outcome clearly.
+
 The API creates one shared Neo4j driver when the server starts and closes it when the server stops. Ingestion remains synchronous: the request returns after screening, extraction, vocabulary resolution, embedding, storage, and edge generation have completed.
+
+### Phase 8 note
+
+Phase 8 adds a full-screen celestial knowledge atlas using Sigma.js and Graphology. `GET /graph` returns paper nodes and similarity edges in one request so the frontend does not make one edge request per paper.
+
+The visualization derives navigation landmarks from existing paper metadata:
+
+- canonical `domain` values become broad visual regions
+- each paper's first canonical concept becomes its initial sub-region anchor
+- stored `Paper` nodes and `SIMILAR_TO` edges remain the actual graph
+
+Domain and concept landmarks are generated only in the browser. They are visual navigation aids, not new Neo4j nodes or permanent ontology claims. This lets the owner evaluate emergent layered navigation before considering any schema changes.
+
+The frontend uses semantic zoom: domain and concept labels remain visible as wrapped navigation landmarks, while paper labels emerge at the nearest level. Shape communicates node role without relying only on color: domains use rings, concepts use diamonds, and papers use circles. Repeated domain/concept labels are suppressed so metadata aliases do not appear as separate regions. Search, camera movement, neighborhood highlighting, paper details, ingestion controls, source links, loading/error states, and mobile layout are included in the initial implementation. Local-file source URLs are not opened from the browser; the UI offers a title-and-author Scholar search instead.
+
+When a paper is selected or hovered, its own nominated top-three similarity edges are highlighted in gold. Incoming-only edges remain visible in muted gray, distinguishing papers the selected paper chose from papers that independently chose it without discarding either relationship.
+
+Field placement uses a lightweight graph-derived hybrid layout. Cross-field paper similarities attract their field centers, while field-level repulsion and protected radii based on paper/concept counts prevent regions from overlapping. The resulting distance is a relative navigation signal rather than a precise embedding metric.
+
+The frontend exposes two separate pages without adding a routing dependency: `/` is the live graph explorer and `/about` is a standalone visual explanation of ingestion, similarity nominations, semantic zoom, graph updates, and the boundary between AI structure and human judgment.
 
 ## Repo layout
 
@@ -155,7 +183,7 @@ The API creates one shared Neo4j driver when the server starts and closes it whe
 |   |-- edges/
 |   |-- api/
 |   `-- tests/
-|-- frontend/        # deferred to Phase 8
+|-- frontend/        # React/Vite/Sigma knowledge atlas
 `-- docs/            # diagrams, design notes
 ```
 

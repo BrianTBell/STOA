@@ -65,3 +65,17 @@ class EdgeResponse(BaseModel):
 class PaperEdgesResponse(BaseModel):
     id: str
     edges: list[EdgeResponse]
+
+
+class GraphEdgeResponse(BaseModel):
+    source_id: str
+    target_id: str
+    score: float
+    nominated_by: list[str] = Field(default_factory=list)
+    created_at: str
+    updated_at: str
+
+
+class GraphResponse(BaseModel):
+    papers: list[PaperResponse]
+    edges: list[GraphEdgeResponse]

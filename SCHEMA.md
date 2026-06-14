@@ -65,12 +65,13 @@ Generated directly from Neo4j vector-neighbor results after a paper is stored.
 {
   "type": "SIMILAR_TO",
   "score": 0.0,
+  "nominated_by": ["paper_id"],
   "created_at": "ISO 8601",
   "updated_at": "ISO 8601"
 }
 ```
 
-`score` is the cosine-similarity value returned by Neo4j's vector index for the paper pair. In Phase 5, edges are grounded in embedding similarity rather than an additional Claude judgment step.
+`score` is the exact cosine-similarity value for the paper pair. `nominated_by` records which endpoint currently includes the other in its top-three eligible neighbors. The canonical edge remains while at least one endpoint nominates the other; mutual nomination is not required. In Phase 5, edges are grounded in embedding similarity rather than an additional Claude judgment step.
 
 ## Vocabulary resolution
 

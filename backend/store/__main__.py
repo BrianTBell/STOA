@@ -47,6 +47,11 @@ def main() -> None:
     edges_parser.add_argument("paper_id", help="Paper node id, e.g. arxiv:2301.04567")
     edges_parser.add_argument("--limit", type=int, default=20, help="Maximum number of edges to return")
 
+    subparsers.add_parser(
+        "rebuild-edges",
+        help="Rebuild exact top-three similarity nominations for all papers",
+    )
+
     vocab_parser = subparsers.add_parser("vocab", help="List stored Vocabulary nodes")
     vocab_parser.add_argument("--type", choices=["concept", "method", "domain"], help="Filter vocabulary by type")
     vocab_parser.add_argument("--limit", type=int, default=100, help="Maximum number of vocabulary nodes to return")
@@ -99,6 +104,11 @@ def main() -> None:
         if args.command == "vocab":
             vocab_entries = store.list_vocabulary(term_type=args.type, limit=args.limit)
             print(json.dumps(vocab_entries, indent=2))
+            return
+
+        if args.command == "rebuild-edges":
+            result = store.rebuild_similarity_edges()
+            print(json.dumps(result, indent=2))
             return
 
         paper = store.get_paper(args.paper_id)

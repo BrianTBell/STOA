@@ -212,3 +212,19 @@ I learned more about the frontend to backend pipeline with regard to uvicorn / f
 
 
 -------------------- Phase 8 --------------------
+This was probably the biggest update so far. Spent about two days getting this front end together and improving so it look at least okay. Used sigma and react to make a really awesome frontend that visualizes the DB contents. Not much to say about many of the tweaks as they were mostly small visual adjustments. 
+
+This did present some more serious issues in regard to data presentation. I decided to depict the top three matches of a paper through a strong
+primary color representative of the technical domain. Other papers which recommend the paper of intrest, who's link is not reciprocated are present,
+but greyed out. 
+
+This also made me realize that nearest neighbors weren't reweighed on a new papers ingestion. Basically this consideration is implemented by 
+comparing the new paper to the 3rd ranking neighbor of papers in close proximity to the newly uploaded node. 
+
+Again, not many huge issues here. Just really happy to see a clean GUI on this, and I had a lot of fun tweaking / beatifying the front end.
+My first two coding languages were HTML and CSS. I've done many web projects, but never a developed a full stack app as complete as this. It is very cool
+to see this idea come together into a tangible platform. 
+
+This stage has presented a prototype which I can play with. After some playing around, I'll continue building. I'll probably break from the roadmap a 
+bit and just develop as I please, given I have something I'm happy with. I may not capture many more of my updates as isolated phases, just little commits
+here and there. :)

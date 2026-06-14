@@ -86,10 +86,16 @@ This phase intentionally comes after edges because the core graph structure matt
 **Goal:** A React app that renders the graph and lets the owner click around.
 
 **Done when:**
-- A graph viz library is chosen (candidates: Sigma.js, Cytoscape.js, react-force-graph) and rationale captured in `ARCHITECTURE.md`
+- Sigma.js and Graphology are chosen and the rationale is captured in `ARCHITECTURE.md`
 - The graph renders with nodes and edges from the API
+- The frontend can ingest a local PDF or an arXiv ID through the existing API
 - Clicking a node shows its attributes and a link to the source
-- Layered/zoom navigation is sketched (does not need to be fully realized in this phase)
+- Local papers provide a title-and-author source search because browsers cannot open local file paths from an HTTP page
+- Search can focus the graph on a paper
+- Hovering or selecting a paper emphasizes its local similarity neighborhood
+- Domain and concept landmarks are derived from existing metadata without changing the database schema
+- Layered semantic zoom reveals domain, concept, and paper labels at different camera levels
+- Loading, error, empty, desktop, and mobile states are implemented
 
 ## Phase 9 - AI assistant query layer
 

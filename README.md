@@ -27,6 +27,50 @@ python -m backend.api
 
 Open `http://127.0.0.1:8000/docs` for the interactive OpenAPI documentation.
 
+## Frontend
+
+Run the complete local application from the repository root:
+
+```powershell
+python -m backend.dev launch
+python -m backend.dev reboot
+python -m backend.dev shutdown
+```
+
+`launch` and `reboot` start the API and frontend in the background, wait for
+both to become available, and open STOA in the default browser. Runtime logs
+are stored under `backend/dev/.runtime/`. Use `python -m backend.dev status`
+to check whether each process is running.
+
+The individual startup commands remain available when debugging:
+
+Start the backend in the first PowerShell window:
+
+```powershell
+python -m backend.api
+```
+
+In a second PowerShell window, install and start the frontend:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The Vite development server forwards `/api`
+requests to the FastAPI server on port `8000`.
+
+Use **Add paper** in the top-right corner to upload a local PDF or enter an
+arXiv ID. When ingestion finishes, the atlas refreshes and focuses the new paper.
+
+Build the production frontend:
+
+```powershell
+cd frontend
+npm run build
+```
+
 ## API examples
 
 Upload a local PDF as the request body:

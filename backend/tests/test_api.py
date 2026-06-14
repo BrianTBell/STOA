@@ -7,6 +7,9 @@ from typing import Any
 from urllib.parse import urlencode
 
 from backend.api import create_app
+from backend.api.service import DuplicatePaperError
+from backend.ingest import IntakeRejectedError, PaperReadError
+from backend.screen import IntakeScreenResult
 
 
 def sample_paper(paper_id: str = "localpdf:abc123") -> dict[str, Any]:
@@ -29,6 +32,7 @@ class FakeService:
     def __init__(self) -> None:
         self.pdf_call: tuple[bytes, str, str | None] | None = None
         self.arxiv_call: str | None = None
+        self.ingest_error: Exception | None = None
 
     def _ingestion_result(self, paper_id: str) -> dict[str, Any]:
         return {
@@ -47,10 +51,14 @@ class FakeService:
         filename: str,
         source_url: str | None = None,
     ) -> dict[str, Any]:
+        if self.ingest_error is not None:
+            raise self.ingest_error
         self.pdf_call = (pdf_bytes, filename, source_url)
         return self._ingestion_result("localpdf:abc123")
 
     def ingest_arxiv(self, arxiv_id: str) -> dict[str, Any]:
+        if self.ingest_error is not None:
+            raise self.ingest_error
         self.arxiv_call = arxiv_id
         return self._ingestion_result(f"arxiv:{arxiv_id}")
 
@@ -84,6 +92,24 @@ class FakeService:
                     "paper": sample_paper("localpdf:neighbor"),
                 }
             ][:limit],
+        }
+
+    def get_graph(self, limit: int) -> dict[str, Any]:
+        return {
+            "papers": [
+                sample_paper("localpdf:abc123"),
+                sample_paper("localpdf:neighbor"),
+            ][:limit],
+            "edges": [
+                {
+                    "source_id": "localpdf:abc123",
+                    "target_id": "localpdf:neighbor",
+                    "score": 0.91,
+                    "nominated_by": ["localpdf:abc123"],
+                    "created_at": "2026-06-13T12:00:00+00:00",
+                    "updated_at": "2026-06-13T12:00:00+00:00",
+                }
+            ],
         }
 
 
@@ -179,14 +205,66 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response["paper"]["id"], "arxiv:2301.04567")
         self.assertEqual(self.service.arxiv_call, "2301.04567")
 
+    def test_duplicate_ingestion_returns_existing_paper(self) -> None:
+        self.service.ingest_error = DuplicatePaperError(sample_paper())
+        status_code, response = self.request(
+            "POST",
+            "/ingest/pdf",
+            query={"filename": "paper.pdf"},
+            body=b"%PDF-test",
+            content_type="application/pdf",
+        )
+
+        self.assertEqual(status_code, 409)
+        self.assertEqual(response["detail"]["code"], "duplicate_paper")
+        self.assertEqual(response["detail"]["paper"]["id"], "localpdf:abc123")
+
+    def test_unreadable_pdf_has_specific_error_code(self) -> None:
+        self.service.ingest_error = PaperReadError("Could not extract text.")
+        status_code, response = self.request(
+            "POST",
+            "/ingest/pdf",
+            query={"filename": "paper.pdf"},
+            body=b"%PDF-test",
+            content_type="application/pdf",
+        )
+
+        self.assertEqual(status_code, 400)
+        self.assertEqual(response["detail"]["code"], "cannot_read_paper")
+
+    def test_rejected_paper_returns_screening_rationale(self) -> None:
+        self.service.ingest_error = IntakeRejectedError(
+            IntakeScreenResult(
+                decision="reject",
+                rationale="The upload is not an academic paper.",
+            )
+        )
+        status_code, response = self.request(
+            "POST",
+            "/ingest/pdf",
+            query={"filename": "paper.pdf"},
+            body=b"%PDF-test",
+            content_type="application/pdf",
+        )
+
+        self.assertEqual(status_code, 422)
+        self.assertEqual(response["detail"]["code"], "not_academic_paper")
+        self.assertEqual(
+            response["detail"]["rationale"],
+            "The upload is not an academic paper.",
+        )
+
     def test_graph_read_endpoints(self) -> None:
         list_status, papers = self.request("GET", "/papers")
+        graph_status, graph = self.request("GET", "/graph")
         paper_status, paper = self.request("GET", "/papers/localpdf:abc123")
         edges_status, edges = self.request("GET", "/papers/localpdf:abc123/edges")
         similar_status, similar = self.request("GET", "/papers/localpdf:abc123/similar")
 
         self.assertEqual(list_status, 200)
         self.assertEqual(len(papers), 1)
+        self.assertEqual(graph_status, 200)
+        self.assertEqual(graph["edges"][0]["nominated_by"], ["localpdf:abc123"])
         self.assertEqual(paper_status, 200)
         self.assertEqual(paper["id"], "localpdf:abc123")
         self.assertEqual(edges_status, 200)

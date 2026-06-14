@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from backend.ingest import (
     IngestionResult,
+    build_local_pdf_id,
     ingest_prepared_paper,
     prepare_arxiv,
     prepare_pdf_bytes,
@@ -14,6 +15,13 @@ from backend.ingest.pipeline import ClaudeConfig
 
 if TYPE_CHECKING:
     from backend.store import Neo4jPaperStore
+
+
+class DuplicatePaperError(RuntimeError):
+    def __init__(self, paper: dict[str, Any]) -> None:
+        self.paper = paper_without_embedding(paper)
+        title = self.paper.get("title") or self.paper["id"]
+        super().__init__(f'"{title}" is already in STOA.')
 
 
 def paper_without_embedding(paper: dict[str, Any]) -> dict[str, Any]:
@@ -33,13 +41,20 @@ class StoaService:
         filename: str,
         source_url: str | None = None,
     ) -> dict[str, Any]:
+        existing = self.store.get_paper(build_local_pdf_id(pdf_bytes))
+        if existing is not None:
+            raise DuplicatePaperError(existing)
         prepared = prepare_pdf_bytes(pdf_bytes, filename, source_url=source_url)
         return self._format_ingestion_result(
             ingest_prepared_paper(prepared, self.claude_config, self.store)
         )
 
     def ingest_arxiv(self, arxiv_id: str) -> dict[str, Any]:
-        prepared = prepare_arxiv(arxiv_id)
+        cleaned_id = arxiv_id.strip()
+        existing = self.store.get_paper(f"arxiv:{cleaned_id}")
+        if existing is not None:
+            raise DuplicatePaperError(existing)
+        prepared = prepare_arxiv(cleaned_id)
         return self._format_ingestion_result(
             ingest_prepared_paper(prepared, self.claude_config, self.store)
         )
@@ -53,6 +68,16 @@ class StoaService:
     def get_paper(self, paper_id: str) -> dict[str, Any] | None:
         paper = self.store.get_paper(paper_id)
         return paper_without_embedding(paper) if paper is not None else None
+
+    def get_graph(self, limit: int) -> dict[str, Any]:
+        graph = self.store.get_graph(limit=limit)
+        return {
+            "papers": [
+                paper_without_embedding(paper)
+                for paper in graph["papers"]
+            ],
+            "edges": graph["edges"],
+        }
 
     def get_similarity(self, paper_id: str, limit: int) -> dict[str, Any]:
         matches = self.store.find_similar_papers(paper_id, limit=limit)
