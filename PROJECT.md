@@ -1,52 +1,52 @@
 # Project
 
-A community-curated knowledge graph that maps relationships between ideas across human knowledge. AI handles structure, humans handle value.
+STOA is a full stack learning project. I am a mechanical engineer teaching myself modern software by building one real thing end to end: a knowledge graph that ingests technical papers, uses an LLM to extract their structure, embeds them, stores them in a graph database, and renders them as an explorable map. It is a portfolio piece, not a product. I built it to learn the stack and to have something real to show, and this document is honest about both what works and what I would change.
 
-## The problem
+## What it does
 
-Knowledge is fragmented. It lives in papers, books, lectures, posts, and conversations, siloed by medium and domain. Discovery is largely accidental — you don't know what you don't know. There is no living map of how ideas actually connect.
+Upload a technical paper, as a local PDF or by arXiv ID, and STOA:
 
-## The vision
+- screens it with Claude to reject obvious non-papers
+- extracts concepts, methods, domain, and a summary as structured JSON
+- embeds the summary fields locally with `sentence-transformers`
+- discards the source text and stores only the structured record, the embedding, and a link back to the original
+- nominates each paper's nearest neighbors by cosine similarity and writes `SIMILAR_TO` edges
+- renders the result as a zoomable graph in the browser
 
-A **living ontology** — a graph that grows continuously as content is ingested, that organizes itself around concepts (not citations), and that surfaces quality through community signal rather than gatekeeping. Imagine exploring knowledge the way you'd explore a universe: zoom out to see fields like galaxies, zoom in to see topics like planets, zoom further to see individual papers as cities.
+`ARCHITECTURE.md` has the full pipeline, `SCHEMA.md` the node schema, and `ROADMAP.md` the phase by phase build record.
 
-## Philosophy
+## What I learned
 
-- **AI structures, humans value.** AI does the mechanical work of parsing, embedding, extracting concepts, and proposing connections. Humans decide what's worth surfacing through votes and refinement.
-- **Honor-based curation.** No gatekeepers on ideas or academic quality. Quality emerges through community signal over time. The only intake rejection is for obvious junk input that does not appear to be a real academic paper or contains too little usable content to parse.
-- **Concepts over citations.** Edges represent conceptual relationships between ideas, not citation graphs. Citation lineage is at best an optional secondary lens.
-- **Copyright-clean by construction.** Source content is parsed for its meaning and then discarded. Nodes hold structured summaries, embeddings, and a link back to the original — never the original itself.
-- **Schema emerges from data.** Node attributes are not predefined. They are extracted from content and reconciled against an evolving canonical vocabulary so the graph self-organizes without becoming a tag soup.
+The point of the project. Building it end to end meant getting hands on with:
 
-## What this is not
+- **LLM structured extraction** — prompting Claude to return reliable JSON, plus a separate intake screening pass
+- **Vector embeddings** — generating dense vectors locally and reasoning about model memory cost
+- **Graph databases** — Neo4j, Cypher, a vector index, and similarity queries
+- **Edge generation** — turning nearest neighbor search into a stored, inspectable relationship
+- **Frontend rendering** — React, TypeScript, and a WebGL graph with Sigma.js and Graphology, including semantic zoom
+- **API design** — FastAPI, an OpenAPI surface, and one reusable pipeline shared by the CLI and the API
+- **Deployment and operations** — shipping the frontend to Vercel and the backend to Render, plus the practical security work: keeping secrets server side, CORS, cost caps, and a memory limit I had to diagnose on a small instance
 
-- Not a paper repository
-- Not a citation graph
-- Not a social network for researchers
-- Not an AI-curated authority on quality
-- Not gatekept
+## Design choices I am happy with
 
-## Initial scope
+A few decisions that reflect real engineering judgment rather than ambition:
 
-The prototype is intentionally narrow:
+- **Copyright clean by construction.** Source content is parsed for meaning and then discarded. Nodes hold structured summaries, embeddings, and a link back, never the original text.
+- **Schema emerges from data.** Node attributes are not predefined. They are extracted from content and reconciled against an evolving canonical vocabulary so the graph self organizes instead of becoming tag soup.
+- **One pipeline, two entry points.** The CLI and the API run the same ingestion code, so behavior cannot drift between them.
 
-- **Text sources only** — local PDF upload is primary; arXiv ingestion is a secondary convenience
-- **One domain** to seed the graph (chosen by the owner during Phase 1)
-- **Single user** — the owner is the only "community" while the graph is small
-- **Local infrastructure** — Neo4j local, Python backend, simple frontend
+## Limitations and what I would do differently
 
-Multi-source ingestion (video, audio, books), real community voting, and account-based contribution are explicitly out of scope until the core pipeline works end to end.
+Being clear about the limits matters more to me than overselling the idea.
 
-## Long-term direction
+- **Similarity is adjacency, not progression.** The graph connects papers that resemble each other, but cosine similarity has no notion of order. It cannot tell you what to read first, so it does not, on its own, produce a learning path. The genuinely differentiated version would replace the similarity engine with LLM extracted concept dependencies (which concepts a paper assumes versus introduces), giving directed prerequisite edges. That is the rebuild I would do if I took this further.
+- **An upload only graph maps your reading, not a field.** Because the graph contains only what you feed it, it cannot show you what you are missing, which is the hardest and most valuable part of mapping an unfamiliar area. Solving that would mean ingesting beyond your own reading, for example pulling a seed paper's references, which moves the project toward existing tools like Connected Papers and Semantic Scholar.
+- **Cold start is real.** The first handful of papers surface little, because a similarity graph is only useful once it is dense.
 
-Once the core pipeline is solid:
+## Scope
 
-- Expand to additional text sources beyond arXiv
-- Add video and audio ingestion (transcription → same pipeline)
-- Build the community contribution and voting layer
-- Add the AI assistant query interface ("who are the key players in this topic")
-- Implement the layered universe-style UI for exploration
+This is a single user prototype seeded by me. Ideas I explored but did not pursue, because this is a learning build and not a business, include community voting and curation, multi source ingestion (video, audio, books), and a natural language query assistant. They live in `ROADMAP.md` as possible extensions, not commitments.
 
 ## Owner
 
-Mechanical engineer by background, Python-fluent, learning the full stack as the project grows. The owner steers the project conceptually and validates output. Coding is delegated to AI agents (see `AGENTS.md`).
+Mechanical engineer by background, Python fluent, learning the full stack by building this. I steer the project conceptually and validate the output; the implementation is done with AI coding agents (see `AGENTS.md`).

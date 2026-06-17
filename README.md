@@ -1,6 +1,6 @@
 # STOA
  
-A research tool and emergent knowledge graph. Upload a technical paper and STOA parses it, stores it as a node in a graph database, and surfaces the most similar existing papers to guide your reading across a new field.
+A full stack learning project built end to end: upload a technical paper and STOA parses it with an LLM, stores it as a node in a graph database, embeds it, and surfaces the most similar existing papers as an explorable graph. It is a portfolio piece rather than a product. See `PROJECT.md` for what I set out to learn, the design choices I am happy with, and an honest account of the limitations.
  
 **Full writeup and demo:** https://briantbell.github.io/stoa.html
  

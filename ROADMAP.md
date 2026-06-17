@@ -1,6 +1,8 @@
 # Roadmap
 
-Phases run in order. Do not start the next phase until the current phase is verified working by the owner.
+This is the build record for the project, kept as a log of how it was built phase by phase. Phases 1 through 8 are complete: ingestion, extraction, storage, embeddings, vocabulary resolution, edge generation, input screening, the API, and the frontend are all working, and the prototype is deployed. Each phase below documents what was built and the criteria it had to meet.
+
+Phases 9 and 10 are possible extensions, not commitments. Because STOA is a learning project rather than a business, I have not pursued them, and the limitations in `PROJECT.md` explain why the more interesting next step would be a rebuild of the edge logic rather than these features.
 
 ## Phase 1 - Ingestion and extraction
 
@@ -97,7 +99,7 @@ This phase intentionally comes after edges because the core graph structure matt
 - Layered semantic zoom reveals domain, concept, and paper labels at different camera levels
 - Loading, error, empty, desktop, and mobile states are implemented
 
-## Phase 9 - AI assistant query layer
+## Phase 9 - AI assistant query layer (possible extension, not pursued)
 
 **Goal:** Natural-language queries against the graph.
 
@@ -106,9 +108,9 @@ This phase intentionally comes after edges because the core graph structure matt
 - Claude translates the question into a Cypher query or graph traversal
 - Results are rendered back to the user
 
-## Phase 10 - Community layer (future)
+## Phase 10 - Community layer (possible extension, not pursued)
 
-Out of scope for the immediate roadmap. When the time comes, this includes user accounts, voting, the `community_score` field becoming live, and contribution mechanics.
+Out of scope, and not planned. When the time comes, this includes user accounts, voting, the `community_score` field becoming live, and contribution mechanics.
 
 ## Cross-cutting work
 
