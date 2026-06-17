@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
 
 from sentence_transformers import SentenceTransformer
@@ -45,7 +46,15 @@ def build_embedding_input(paper: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+@lru_cache(maxsize=2)
 def load_embedder(model_name: str = DEFAULT_EMBEDDING_MODEL) -> SentenceTransformer:
+    """Load the embedding model once per process and reuse it.
+
+    The lru_cache means the heavy SentenceTransformer (and PyTorch) load
+    happens on the first call only. Every later ingestion reuses the same
+    in memory instance instead of reloading the whole model, which keeps
+    memory flat and avoids the load spike that crashed the small instance.
+    """
     return SentenceTransformer(model_name)
 
 
