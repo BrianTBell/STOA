@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Protocol
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.ingest import (
     IngestionError,
@@ -76,6 +78,25 @@ def create_app(service: ApiService | None = None) -> FastAPI:
         version="0.1.0",
         description="Ingest academic papers and query the STOA knowledge graph.",
         lifespan=lifespan,
+    )
+
+    # CORS: allow the public frontend(s) to call this API from the browser.
+    # Defaults cover the Vercel production alias and local dev. Set
+    # CORS_ALLOW_ORIGINS (comma separated) on Render to add a custom domain
+    # later without a code change. The regex covers Vercel preview deploys.
+    default_origins = [
+        "https://stoa-pi.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ]
+    configured = os.getenv("CORS_ALLOW_ORIGINS", "")
+    allow_origins = [o.strip() for o in configured.split(",") if o.strip()] or default_origins
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_origin_regex=r"https://stoa-[a-z0-9]+-remmirath\.vercel\.app",
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     def get_service(request: Request) -> ApiService:
