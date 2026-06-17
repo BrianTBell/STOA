@@ -6,6 +6,14 @@ import GraphCanvas from "./GraphCanvas";
 import stoaLogo from "./stoa-logo.png";
 import type { GraphPayload, Paper } from "./types";
 
+// In production VITE_API_URL points at the deployed backend (no /api prefix,
+// since the API serves routes at the root). In local dev it is unset, so we
+// fall back to the /api prefix that the Vite proxy forwards to localhost:8000.
+const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+function apiUrl(path: string): string {
+  return API_BASE ? `${API_BASE}${path}` : `/api${path}`;
+}
+
 type LoadState =
   | { status: "loading" }
   | { status: "ready"; payload: GraphPayload }
@@ -95,7 +103,7 @@ function AtlasApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadGraph(signal?: AbortSignal): Promise<GraphPayload> {
-    const response = await fetch("/api/graph?limit=5000", { signal });
+    const response = await fetch(apiUrl("/graph?limit=5000"), { signal });
     if (!response.ok) {
       throw new Error(`The atlas API returned ${response.status}.`);
     }
@@ -256,14 +264,14 @@ function AtlasApp() {
     if (!file) return;
     void submitIngestion(
       file,
-      `/api/ingest/pdf?filename=${encodeURIComponent(file.name)}`,
+      apiUrl(`/ingest/pdf?filename=${encodeURIComponent(file.name)}`),
     );
   }
 
   function ingestArxiv() {
     const cleanId = arxivId.trim();
     if (!cleanId) return;
-    void submitIngestion(JSON.stringify({ arxiv_id: cleanId }), "/api/ingest/arxiv");
+    void submitIngestion(JSON.stringify({ arxiv_id: cleanId }), apiUrl("/ingest/arxiv"));
   }
 
   const hasWebSource =
